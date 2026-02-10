@@ -46,18 +46,7 @@ fn is_speakable_event(event_type: &str) -> bool {
 }
 
 fn should_speak(event: &Event) -> bool {
-    if !is_speakable_event(&event.event_type) {
-        return false;
-    }
-    let priority = event.priority.as_deref().unwrap_or("low");
-    matches!(priority, "critical" | "high")
-}
-
-fn should_speak_if_idle(event: &Event) -> bool {
-    if !is_speakable_event(&event.event_type) {
-        return false;
-    }
-    event.priority.as_deref() == Some("medium")
+    is_speakable_event(&event.event_type)
 }
 
 fn is_critical(event: &Event) -> bool {
@@ -435,9 +424,6 @@ pub fn run_commander() -> anyhow::Result<()> {
     // Connect to subscribe.sock
     let sock_path = paths::subscribe_socket_path();
     let mut cooldown = CooldownTracker::new(commander_config.cooldown_sec);
-    let max_queue = commander_config.max_queue;
-
-    let mut pending_count: usize = 0;
 
     'outer: loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
@@ -500,18 +486,11 @@ pub fn run_commander() -> anyhow::Result<()> {
                         }
                     };
 
-                    let speak_now = should_speak(&event);
-                    let speak_idle = should_speak_if_idle(&event);
+                    if !should_speak(&event) {
+                        continue;
+                    }
+
                     let critical = is_critical(&event);
-
-                    if !speak_now && !speak_idle {
-                        continue;
-                    }
-
-                    // For idle-only events, only speak if queue is empty
-                    if speak_idle && !speak_now && pending_count > 0 {
-                        continue;
-                    }
 
                     // Cooldown check
                     match cooldown.check(&event.project, &event.event_type) {
@@ -541,12 +520,6 @@ pub fn run_commander() -> anyhow::Result<()> {
                         interrupt.store(true, Ordering::Relaxed);
                     }
 
-                    // Queue management: drop oldest if at capacity
-                    if pending_count >= max_queue && !critical {
-                        continue;
-                    }
-
-                    pending_count = pending_count.saturating_add(1);
                     let _ = speech_tx.send(SpeechMessage {
                         text,
                         instruct,
@@ -649,8 +622,8 @@ mod tests {
     }
 
     #[test]
-    fn should_speak_checks_priority() {
-        let mut event = Event {
+    fn should_speak_filters_by_event_type() {
+        let speakable = Event {
             event_type: "agent.error".into(),
             project: "p".into(),
             source: "s".into(),
@@ -659,20 +632,15 @@ mod tests {
             title: None,
             body: None,
             meta: None,
-            priority: Some("critical".into()),
+            priority: None,
         };
-        assert!(should_speak(&event));
+        assert!(should_speak(&speakable));
 
-        event.priority = Some("high".into());
-        assert!(should_speak(&event));
-
-        event.priority = Some("medium".into());
-        assert!(!should_speak(&event));
-        assert!(should_speak_if_idle(&event));
-
-        event.priority = Some("low".into());
-        assert!(!should_speak(&event));
-        assert!(!should_speak_if_idle(&event));
+        let not_speakable = Event {
+            event_type: "workspace.created".into(),
+            ..speakable.clone()
+        };
+        assert!(!should_speak(&not_speakable));
     }
 
     #[test]

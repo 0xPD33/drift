@@ -1,0 +1,13 @@
+[package]
+name = "drift-daemon"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+drift-core = { path = "../drift-core" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+niri-ipc = "25.11"
+nix = { version = "0.29", features = ["signal", "process"] }
+libc = "0.2"

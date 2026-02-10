@@ -45,6 +45,19 @@ pub fn build_env(project: &ProjectConfig) -> anyhow::Result<HashMap<String, Stri
         env.insert(key.clone(), value.clone());
     }
 
+    if let Some(ports) = &project.ports {
+        if let Some([start, end]) = ports.range {
+            env.insert("DRIFT_PORT_RANGE_START".into(), start.to_string());
+            env.insert("DRIFT_PORT_RANGE_END".into(), end.to_string());
+        }
+        for (name, port) in &ports.named {
+            env.insert(
+                format!("DRIFT_PORT_{}", name.to_uppercase()),
+                port.to_string(),
+            );
+        }
+    }
+
     Ok(env)
 }
 
@@ -135,5 +148,50 @@ mod tests {
         let env = HashMap::new();
         let result = format_env_exports(&env);
         assert_eq!(result, "");
+    }
+
+    #[test]
+    fn build_env_with_ports_range() {
+        use crate::config::ProjectPorts;
+        let mut project = minimal_project("myapp", "/tmp/myapp");
+        project.ports = Some(ProjectPorts {
+            range: Some([3000, 3010]),
+            named: HashMap::new(),
+        });
+        let env = build_env(&project).unwrap();
+        assert_eq!(env.get("DRIFT_PORT_RANGE_START").unwrap(), "3000");
+        assert_eq!(env.get("DRIFT_PORT_RANGE_END").unwrap(), "3010");
+    }
+
+    #[test]
+    fn build_env_with_named_ports() {
+        use crate::config::ProjectPorts;
+        let mut project = minimal_project("myapp", "/tmp/myapp");
+        let mut named = HashMap::new();
+        named.insert("api".into(), 3001);
+        named.insert("frontend".into(), 3002);
+        project.ports = Some(ProjectPorts {
+            range: None,
+            named,
+        });
+        let env = build_env(&project).unwrap();
+        assert_eq!(env.get("DRIFT_PORT_API").unwrap(), "3001");
+        assert_eq!(env.get("DRIFT_PORT_FRONTEND").unwrap(), "3002");
+    }
+
+    #[test]
+    fn build_env_with_ports_range_and_named() {
+        use crate::config::ProjectPorts;
+        let mut project = minimal_project("myapp", "/tmp/myapp");
+        let mut named = HashMap::new();
+        named.insert("api".into(), 3001);
+        project.ports = Some(ProjectPorts {
+            range: Some([3000, 3010]),
+            named,
+        });
+        let env = build_env(&project).unwrap();
+        assert_eq!(env.get("DRIFT_PORT_RANGE_START").unwrap(), "3000");
+        assert_eq!(env.get("DRIFT_PORT_RANGE_END").unwrap(), "3010");
+        assert_eq!(env.get("DRIFT_PORT_API").unwrap(), "3001");
     }
 }

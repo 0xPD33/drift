@@ -31,6 +31,11 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     // Build environment
     let env_vars = env::build_env(&project)?;
 
+    // Port conflict detection
+    if let Some(ports) = &project.ports {
+        check_port_conflicts(name, ports, &mut niri_client);
+    }
+
     let repo_path = config::resolve_repo_path(&project.project.repo);
 
     // Set git identity if configured
@@ -175,5 +180,60 @@ fn build_terminal_command(
     format!(
         "{export_str} && cd {repo_path} && exec {terminal} {title_flag}{exec_flag}"
     )
+}
+
+fn check_port_conflicts(
+    project_name: &str,
+    ports: &drift_core::config::ProjectPorts,
+    niri_client: &mut drift_core::niri::NiriClient,
+) {
+    let other_projects = match registry::list_projects() {
+        Ok(projects) => projects,
+        Err(_) => return,
+    };
+
+    let our_ports: std::collections::HashSet<u16> = collect_ports(ports);
+    if our_ports.is_empty() {
+        return;
+    }
+
+    for other in &other_projects {
+        if other.project.name == project_name {
+            continue;
+        }
+        let Some(other_ports) = &other.ports else {
+            continue;
+        };
+        // Only check projects that have an open workspace
+        if niri_client
+            .find_workspace_by_name(&other.project.name)
+            .ok()
+            .flatten()
+            .is_none()
+        {
+            continue;
+        }
+
+        let their_ports = collect_ports(other_ports);
+        for port in our_ports.intersection(&their_ports) {
+            eprintln!(
+                "Warning: port {port} conflicts with project '{}'",
+                other.project.name
+            );
+        }
+    }
+}
+
+fn collect_ports(ports: &drift_core::config::ProjectPorts) -> std::collections::HashSet<u16> {
+    let mut set = std::collections::HashSet::new();
+    if let Some([start, end]) = ports.range {
+        for p in start..=end {
+            set.insert(p);
+        }
+    }
+    for port in ports.named.values() {
+        set.insert(*port);
+    }
+    set
 }
 

@@ -26,6 +26,10 @@ fn main() -> anyhow::Result<()> {
         Commands::Env { name } => commands::env::run(name.as_deref()),
         Commands::NiriRules => commands::niri_rules::run(),
         Commands::Daemon => commands::daemon::run(),
+        Commands::Logs { service, follow, project } => {
+            commands::logs::run(service.as_deref(), follow, project.as_deref())
+        }
+        Commands::Ports { project } => commands::ports::run(project.as_deref()),
         Commands::Notify { project, r#type, source, level, title, body } => {
             commands::notify::run(project.as_deref(), &r#type, &source, &level, &title, &body)
         }

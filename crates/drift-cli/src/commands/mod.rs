@@ -3,9 +3,11 @@ pub mod daemon;
 pub mod env;
 pub mod init;
 pub mod list;
+pub mod logs;
 pub mod niri_rules;
 pub mod notify;
 pub mod open;
+pub mod ports;
 pub mod save;
 pub mod status;
 pub mod to;
@@ -77,6 +79,23 @@ pub enum Commands {
         /// Event body
         #[arg(default_value = "")]
         body: String,
+    },
+    /// View service logs
+    Logs {
+        /// Service name (omit to list available logs)
+        service: Option<String>,
+        /// Follow log output (tail -f)
+        #[arg(short, long)]
+        follow: bool,
+        /// Project name (default: current)
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Show allocated ports for a project
+    Ports {
+        /// Project name (default: current)
+        #[arg(long)]
+        project: Option<String>,
     },
     /// Internal: run service supervisor (not for direct use)
     #[command(name = "_supervisor", hide = true)]

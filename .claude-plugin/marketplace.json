@@ -1,0 +1,12 @@
+{
+  "name": "drift",
+  "owner": { "name": "drift" },
+  "plugins": [
+    {
+      "name": "drift-agent",
+      "source": "./plugins/drift-agent",
+      "description": "Drift integration for AI agents — event emission, TTS announcements, project context",
+      "version": "0.1.0"
+    }
+  ]
+}

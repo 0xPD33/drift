@@ -79,6 +79,41 @@ impl NiriClient {
         }
     }
 
+    pub fn set_workspace_name(&mut self, name: &str) -> anyhow::Result<()> {
+        let reply = self.socket.send(Request::Action(Action::SetWorkspaceName {
+            name: name.to_string(),
+            workspace: None,
+        }))?;
+        match reply {
+            Ok(Response::Handled) => Ok(()),
+            Ok(other) => bail!("unexpected response: {other:?}"),
+            Err(msg) => bail!("niri error: {msg}"),
+        }
+    }
+
+    pub fn focus_workspace_down(&mut self) -> anyhow::Result<()> {
+        let reply = self
+            .socket
+            .send(Request::Action(Action::FocusWorkspaceDown {}))?;
+        match reply {
+            Ok(Response::Handled) => Ok(()),
+            Ok(other) => bail!("unexpected response: {other:?}"),
+            Err(msg) => bail!("niri error: {msg}"),
+        }
+    }
+
+    pub fn create_named_workspace(&mut self, name: &str) -> anyhow::Result<()> {
+        // Focus past the last workspace to create a new empty one, then name it
+        let workspaces = self.workspaces()?;
+        let max_idx = workspaces.len();
+        // Focus workspace beyond the last to create a new one
+        for _ in 0..max_idx {
+            self.focus_workspace_down()?;
+        }
+        self.set_workspace_name(name)?;
+        Ok(())
+    }
+
     pub fn unset_workspace_name(&mut self, name: &str) -> anyhow::Result<()> {
         let reply =
             self.socket

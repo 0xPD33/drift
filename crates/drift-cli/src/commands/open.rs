@@ -18,15 +18,12 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     }
 
     // Cold boot
-    // Regenerate niri-rules.kdl so the workspace is declared statically
+    // Regenerate niri-rules.kdl for persistence across niri restarts
     let all_projects = registry::list_projects()?;
     kdl::write_niri_rules(&all_projects, &global)?;
 
-    // Brief sleep to let niri live-reload the config
-    std::thread::sleep(Duration::from_millis(200));
-
-    // Focus the workspace
-    niri_client.focus_workspace(name)?;
+    // Create a named workspace dynamically via IPC
+    niri_client.create_named_workspace(name)?;
 
     // Build environment
     let env_vars = env::build_env(&project)?;

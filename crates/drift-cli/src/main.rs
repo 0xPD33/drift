@@ -33,8 +33,19 @@ fn main() -> anyhow::Result<()> {
         Commands::Notify { project, r#type, source, level, title, body } => {
             commands::notify::run(project.as_deref(), &r#type, &source, &level, &title, &body)
         }
+        Commands::Commander { command } => match command {
+            commands::CommanderCommand::Start => commands::commander::start(),
+            commands::CommanderCommand::Stop => commands::commander::stop(),
+            commands::CommanderCommand::Status => commands::commander::status(),
+            commands::CommanderCommand::Say { text } => commands::commander::say(&text),
+            commands::CommanderCommand::Mute => commands::commander::mute(),
+            commands::CommanderCommand::Unmute => commands::commander::unmute(),
+        },
         Commands::Supervisor { project } => {
             drift_core::supervisor::run_supervisor(&project)
+        }
+        Commands::RunCommander => {
+            drift_core::commander::run_commander()
         }
     }
 }

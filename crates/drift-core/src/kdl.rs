@@ -66,6 +66,7 @@ mod tests {
             },
             ports: PortDefaults::default(),
             events: crate::config::EventsConfig::default(),
+            commander: crate::config::CommanderConfig::default(),
         }
     }
 

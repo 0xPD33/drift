@@ -1,3 +1,4 @@
+pub mod commander;
 pub mod config;
 pub mod env;
 pub mod events;

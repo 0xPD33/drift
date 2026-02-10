@@ -1,4 +1,5 @@
 pub mod close;
+pub mod commander;
 pub mod daemon;
 pub mod env;
 pub mod init;
@@ -13,6 +14,25 @@ pub mod status;
 pub mod to;
 
 use clap::Subcommand;
+
+#[derive(Subcommand)]
+pub enum CommanderCommand {
+    /// Start the TTS event announcer
+    Start,
+    /// Stop the TTS event announcer
+    Stop,
+    /// Show commander status
+    Status,
+    /// Test TTS output
+    Say {
+        /// Text to speak
+        text: String,
+    },
+    /// Temporarily mute announcements
+    Mute,
+    /// Unmute announcements
+    Unmute,
+}
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -97,10 +117,18 @@ pub enum Commands {
         #[arg(long)]
         project: Option<String>,
     },
+    /// TTS event announcer
+    Commander {
+        #[command(subcommand)]
+        command: CommanderCommand,
+    },
     /// Internal: run service supervisor (not for direct use)
     #[command(name = "_supervisor", hide = true)]
     Supervisor {
         /// Project name
         project: String,
     },
+    /// Internal: run commander process (not for direct use)
+    #[command(name = "_commander", hide = true)]
+    RunCommander,
 }

@@ -7,6 +7,7 @@ use std::{fs, thread};
 
 use niri_ipc::{Event as NiriEvent, Window, Workspace};
 use nix::sys::signal::{self, SaFlags, SigAction, SigHandler, SigSet, Signal};
+use nix::unistd::Pid;
 
 use drift_core::config;
 use drift_core::events::{self, Event};
@@ -342,10 +343,77 @@ impl DaemonInner {
     }
 }
 
+fn spawn_commander() -> Option<u32> {
+    let pid_path = paths::commander_pid_path();
+    // Check if already running
+    if pid_path.exists() {
+        if let Ok(pid_str) = fs::read_to_string(&pid_path) {
+            if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                if nix::sys::signal::kill(Pid::from_raw(pid), None).is_ok() {
+                    eprintln!("commander already running (PID {pid})");
+                    return Some(pid as u32);
+                }
+            }
+        }
+    }
+
+    let drift_bin = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("commander: cannot determine binary path: {e}");
+            return None;
+        }
+    };
+
+    let log_path = paths::state_base_dir().join("commander.log");
+    let log_file = match fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("commander: cannot open log: {e}");
+            return None;
+        }
+    };
+    let stderr_file = match log_file.try_clone() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("commander: cannot clone log fd: {e}");
+            return None;
+        }
+    };
+
+    match std::process::Command::new(&drift_bin)
+        .args(["_commander"])
+        .stdout(log_file)
+        .stderr(stderr_file)
+        .stdin(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => {
+            let pid = child.id();
+            eprintln!("commander spawned (PID {pid})");
+            Some(pid)
+        }
+        Err(e) => {
+            eprintln!("commander: failed to spawn: {e}");
+            None
+        }
+    }
+}
+
+fn stop_commander() {
+    let pid_path = paths::commander_pid_path();
+    if let Ok(pid_str) = fs::read_to_string(&pid_path) {
+        if let Ok(pid) = pid_str.trim().parse::<i32>() {
+            let _ = signal::kill(Pid::from_raw(pid), Signal::SIGTERM);
+        }
+    }
+}
+
 pub fn run_daemon() -> anyhow::Result<()> {
     install_signal_handlers();
 
     let global_config = config::load_global_config().unwrap_or_default();
+    let commander_enabled = global_config.commander.enabled;
     let events_config = global_config.events;
 
     let pid_path = paths::daemon_pid_path();
@@ -374,6 +442,10 @@ pub fn run_daemon() -> anyhow::Result<()> {
         .name("subscriber-manager".into())
         .spawn(move || crate::subscriber::run_subscriber_manager(sub_rx, &SHUTDOWN, replay_count))?;
 
+    if commander_enabled {
+        spawn_commander();
+    }
+
     eprintln!("drift daemon started (PID {})", std::process::id());
 
     let mut last_state_write = Instant::now();
@@ -399,6 +471,10 @@ pub fn run_daemon() -> anyhow::Result<()> {
 
     inner.write_state_to_disk();
     let _ = fs::remove_file(&pid_path);
+
+    if commander_enabled {
+        stop_commander();
+    }
 
     eprintln!("drift daemon shutting down");
 

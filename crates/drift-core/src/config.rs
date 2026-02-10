@@ -13,6 +13,8 @@ pub struct GlobalConfig {
     pub ports: PortDefaults,
     #[serde(default)]
     pub events: EventsConfig,
+    #[serde(default)]
+    pub commander: CommanderConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -95,6 +97,59 @@ impl Default for GlobalConfig {
             defaults: Defaults::default(),
             ports: PortDefaults::default(),
             events: EventsConfig::default(),
+            commander: CommanderConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CommanderConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_endpoint")]
+    pub endpoint: String,
+    #[serde(default = "default_voice")]
+    pub voice: String,
+    #[serde(default)]
+    pub instruct: String,
+    #[serde(default)]
+    pub fallback_engine: Option<String>,
+    #[serde(default)]
+    pub fallback_voice: Option<String>,
+    #[serde(default)]
+    pub fallback_command: Option<String>,
+    #[serde(default)]
+    pub audio_filter: Option<String>,
+    #[serde(default)]
+    pub speak_background_only: bool,
+    #[serde(default = "default_cooldown_sec")]
+    pub cooldown_sec: u64,
+    #[serde(default = "default_max_queue")]
+    pub max_queue: usize,
+    #[serde(default)]
+    pub event_instructs: HashMap<String, String>,
+}
+
+fn default_endpoint() -> String { "http://localhost:8880".into() }
+fn default_voice() -> String { "Vivian".into() }
+fn default_cooldown_sec() -> u64 { 5 }
+fn default_max_queue() -> usize { 3 }
+
+impl Default for CommanderConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: default_endpoint(),
+            voice: default_voice(),
+            instruct: String::new(),
+            fallback_engine: None,
+            fallback_voice: None,
+            fallback_command: None,
+            audio_filter: None,
+            speak_background_only: false,
+            cooldown_sec: default_cooldown_sec(),
+            max_queue: default_max_queue(),
+            event_instructs: HashMap::new(),
         }
     }
 }

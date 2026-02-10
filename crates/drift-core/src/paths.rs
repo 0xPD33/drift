@@ -77,6 +77,18 @@ pub fn notify_socket_path() -> PathBuf {
     emit_socket_path()
 }
 
+pub fn commander_pid_path() -> PathBuf {
+    state_base_dir().join("commander.pid")
+}
+
+pub fn commander_muted_path() -> PathBuf {
+    state_base_dir().join("commander.muted")
+}
+
+pub fn commander_state_path() -> PathBuf {
+    state_base_dir().join("commander.json")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

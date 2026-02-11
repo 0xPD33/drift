@@ -14,8 +14,8 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { name, repo, folder } => {
-            commands::init::run(&name, repo.as_deref(), folder.as_deref())
+        Commands::Init { name, repo, folder, template } => {
+            commands::init::run(&name, repo.as_deref(), folder.as_deref(), template.as_deref())
         }
         Commands::List { archived } => commands::list::run(archived),
         Commands::Open { name } => commands::open::run(&name),
@@ -27,11 +27,16 @@ fn main() -> anyhow::Result<()> {
         Commands::Status => commands::status::run(),
         Commands::To { name } => commands::to::run(&name),
         Commands::Env { name } => commands::env::run(name.as_deref()),
+        Commands::Events { r#type, last, all, follow, project } => {
+            commands::events::run(r#type.as_deref(), last, all, follow, project.as_deref())
+        }
         Commands::NiriRules => commands::niri_rules::run(),
         Commands::Daemon => commands::daemon::run(),
         Commands::Logs { service, follow, project } => {
             commands::logs::run(service.as_deref(), follow, project.as_deref())
         }
+        Commands::Add { command } => commands::add::run(command),
+        Commands::Remove { command } => commands::remove::run(command),
         Commands::Ports { project } => commands::ports::run(project.as_deref()),
         Commands::Notify { project, r#type, source, level, title, body } => {
             commands::notify::run(project.as_deref(), &r#type, &source, &level, &title, &body)

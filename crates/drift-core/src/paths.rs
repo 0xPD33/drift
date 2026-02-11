@@ -33,6 +33,10 @@ pub fn pid_file(project: &str, service: &str) -> PathBuf {
     state_dir(project).join(format!("{service}.pid"))
 }
 
+pub fn templates_dir() -> PathBuf {
+    config_dir().join("templates")
+}
+
 pub fn global_config_path() -> PathBuf {
     config_dir().join("config.toml")
 }
@@ -154,5 +158,11 @@ mod tests {
     #[test]
     fn notify_socket_path_is_emit_socket_path() {
         assert_eq!(notify_socket_path(), emit_socket_path());
+    }
+
+    #[test]
+    fn templates_dir_is_config_dir_templates() {
+        let p = templates_dir();
+        assert_eq!(p, config_dir().join("templates"));
     }
 }

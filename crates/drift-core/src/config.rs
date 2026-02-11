@@ -211,16 +211,52 @@ pub struct ServicesConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServiceProcess {
     pub name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub command: String,
-    #[serde(default = "default_cwd")]
+    #[serde(default = "default_cwd", skip_serializing_if = "is_default_cwd")]
     pub cwd: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_default_restart")]
     pub restart: RestartPolicy,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_command: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(default = "default_agent_mode", skip_serializing_if = "is_default_agent_mode")]
+    pub agent_mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_model: Option<String>,
+    #[serde(default = "default_agent_permissions", skip_serializing_if = "is_default_agent_permissions")]
+    pub agent_permissions: String,
 }
 
 fn default_cwd() -> String {
     ".".into()
+}
+
+fn default_agent_mode() -> String {
+    "oneshot".into()
+}
+
+fn default_agent_permissions() -> String {
+    "full".into()
+}
+
+fn is_default_cwd(s: &str) -> bool {
+    s == "."
+}
+
+fn is_default_restart(r: &RestartPolicy) -> bool {
+    matches!(r, RestartPolicy::Never)
+}
+
+fn is_default_agent_mode(s: &str) -> bool {
+    s == "oneshot"
+}
+
+fn is_default_agent_permissions(s: &str) -> bool {
+    s == "full"
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -260,6 +296,43 @@ pub fn load_project_config(name: &str) -> anyhow::Result<ProjectConfig> {
     let contents = std::fs::read_to_string(&path)?;
     let config: ProjectConfig = toml::from_str(&contents)?;
     Ok(config)
+}
+
+pub fn save_project_config(name: &str, config: &ProjectConfig) -> anyhow::Result<()> {
+    let path = paths::project_config_path(name);
+    let toml_str = toml::to_string_pretty(config)?;
+    std::fs::write(&path, toml_str)?;
+    Ok(())
+}
+
+pub fn resolve_current_project(explicit: Option<&str>) -> anyhow::Result<String> {
+    if let Some(n) = explicit {
+        return Ok(n.to_string());
+    }
+
+    if let Ok(project) = std::env::var("DRIFT_PROJECT") {
+        if !project.is_empty() {
+            return Ok(project);
+        }
+    }
+
+    if let Ok(mut client) = crate::niri::NiriClient::connect() {
+        if let Ok(Some(win)) = client.focused_window() {
+            if let Some(ws_id) = win.workspace_id {
+                if let Ok(workspaces) = client.workspaces() {
+                    for ws in &workspaces {
+                        if ws.id == ws_id {
+                            if let Some(ws_name) = &ws.name {
+                                return Ok(ws_name.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    anyhow::bail!("Could not determine project name. Use --project, set $DRIFT_PROJECT, or run from a drift workspace.")
 }
 
 pub fn resolve_repo_path(raw: &str) -> PathBuf {
@@ -509,5 +582,193 @@ replay_on_subscribe = 10
         assert_eq!(config.events.replay_on_subscribe, 10);
         assert_eq!(config.defaults.terminal, "ghostty");
         assert_eq!(config.ports.base, 3000);
+    }
+
+    #[test]
+    fn save_and_load_project_config_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let name = "roundtrip-test";
+        let config_path = dir.path().join(format!("{name}.toml"));
+
+        let config = ProjectConfig {
+            project: ProjectMeta {
+                name: name.into(),
+                repo: "/tmp/test".into(),
+                folder: Some("dev".into()),
+                icon: None,
+            },
+            env: EnvConfig::default(),
+            git: None,
+            ports: None,
+            services: Some(ServicesConfig {
+                processes: vec![ServiceProcess {
+                    name: "api".into(),
+                    command: "npm start".into(),
+                    cwd: ".".into(),
+                    restart: RestartPolicy::OnFailure,
+                    stop_command: None,
+                    agent: None,
+                    prompt: None,
+                    agent_mode: "oneshot".into(),
+                    agent_model: None,
+                    agent_permissions: "full".into(),
+                }],
+            }),
+            windows: vec![WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()) }],
+            scratchpad: None,
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        std::fs::write(&config_path, &toml_str).unwrap();
+        let loaded: ProjectConfig = toml::from_str(&std::fs::read_to_string(&config_path).unwrap()).unwrap();
+
+        assert_eq!(loaded.project.name, name);
+        assert_eq!(loaded.project.repo, "/tmp/test");
+        assert_eq!(loaded.project.folder.as_deref(), Some("dev"));
+        assert_eq!(loaded.services.unwrap().processes[0].name, "api");
+        assert_eq!(loaded.windows[0].name.as_deref(), Some("editor"));
+    }
+
+    #[test]
+    fn config_with_env_vars_roundtrip() {
+        let mut config = ProjectConfig {
+            project: ProjectMeta {
+                name: "env-test".into(),
+                repo: "/tmp".into(),
+                folder: None,
+                icon: None,
+            },
+            env: EnvConfig::default(),
+            git: None,
+            ports: None,
+            services: None,
+            windows: vec![],
+            scratchpad: None,
+        };
+        config.env.vars.insert("NODE_ENV".into(), "development".into());
+        config.env.vars.insert("PORT".into(), "3000".into());
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let loaded: ProjectConfig = toml::from_str(&toml_str).unwrap();
+
+        assert_eq!(loaded.env.vars.get("NODE_ENV").unwrap(), "development");
+        assert_eq!(loaded.env.vars.get("PORT").unwrap(), "3000");
+    }
+
+    #[test]
+    fn config_with_ports_roundtrip() {
+        let config = ProjectConfig {
+            project: ProjectMeta {
+                name: "ports-test".into(),
+                repo: "/tmp".into(),
+                folder: None,
+                icon: None,
+            },
+            env: EnvConfig::default(),
+            git: None,
+            ports: Some(ProjectPorts {
+                range: Some([3000, 3010]),
+                named: [("api".into(), 3001), ("web".into(), 3002)].into_iter().collect(),
+            }),
+            services: None,
+            windows: vec![],
+            scratchpad: None,
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let loaded: ProjectConfig = toml::from_str(&toml_str).unwrap();
+
+        let ports = loaded.ports.unwrap();
+        assert_eq!(ports.range, Some([3000, 3010]));
+        assert_eq!(*ports.named.get("api").unwrap(), 3001);
+        assert_eq!(*ports.named.get("web").unwrap(), 3002);
+    }
+
+    #[test]
+    fn resolve_current_project_explicit() {
+        let result = resolve_current_project(Some("myapp")).unwrap();
+        assert_eq!(result, "myapp");
+    }
+
+    #[test]
+    fn config_services_none_when_empty_processes() {
+        let mut config = ProjectConfig {
+            project: ProjectMeta {
+                name: "svc-test".into(),
+                repo: "/tmp".into(),
+                folder: None,
+                icon: None,
+            },
+            env: EnvConfig::default(),
+            git: None,
+            ports: None,
+            services: Some(ServicesConfig {
+                processes: vec![ServiceProcess {
+                    name: "api".into(),
+                    command: "run".into(),
+                    cwd: ".".into(),
+                    restart: RestartPolicy::Never,
+                    stop_command: None,
+                    agent: None,
+                    prompt: None,
+                    agent_mode: "oneshot".into(),
+                    agent_model: None,
+                    agent_permissions: "full".into(),
+                }],
+            }),
+            windows: vec![],
+            scratchpad: None,
+        };
+
+        // Remove the service
+        if let Some(services) = &mut config.services {
+            services.processes.retain(|p| p.name != "api");
+            if services.processes.is_empty() {
+                config.services = None;
+            }
+        }
+        assert!(config.services.is_none());
+    }
+
+    #[test]
+    fn agent_service_roundtrip() {
+        let config = ProjectConfig {
+            project: ProjectMeta {
+                name: "agent-test".into(),
+                repo: "/tmp".into(),
+                folder: None,
+                icon: None,
+            },
+            env: EnvConfig::default(),
+            git: None,
+            ports: None,
+            services: Some(ServicesConfig {
+                processes: vec![ServiceProcess {
+                    name: "reviewer".into(),
+                    command: String::new(),
+                    cwd: ".".into(),
+                    restart: RestartPolicy::OnFailure,
+                    stop_command: None,
+                    agent: Some("claude".into()),
+                    prompt: Some("Review code".into()),
+                    agent_mode: "oneshot".into(),
+                    agent_model: Some("opus".into()),
+                    agent_permissions: "safe".into(),
+                }],
+            }),
+            windows: vec![],
+            scratchpad: None,
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let loaded: ProjectConfig = toml::from_str(&toml_str).unwrap();
+
+        let svc = &loaded.services.unwrap().processes[0];
+        assert_eq!(svc.name, "reviewer");
+        assert_eq!(svc.agent.as_deref(), Some("claude"));
+        assert_eq!(svc.prompt.as_deref(), Some("Review code"));
+        assert_eq!(svc.agent_model.as_deref(), Some("opus"));
+        assert_eq!(svc.agent_permissions, "safe");
+        assert!(matches!(svc.restart, RestartPolicy::OnFailure));
     }
 }

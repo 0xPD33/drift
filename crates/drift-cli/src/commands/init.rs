@@ -1,10 +1,18 @@
 use anyhow::bail;
-use drift_core::config::{
-    EnvConfig, ProjectConfig, ProjectMeta, WindowConfig,
-};
+use drift_core::config::{EnvConfig, ProjectConfig, ProjectMeta};
 use drift_core::{config, kdl, paths, registry};
 
-pub fn run(name: &str, repo: Option<&str>, folder: Option<&str>) -> anyhow::Result<()> {
+fn load_template(template_name: &str) -> anyhow::Result<ProjectConfig> {
+    let template_path = paths::templates_dir().join(format!("{template_name}.toml"));
+    if !template_path.exists() {
+        bail!("Template '{}' not found at {}", template_name, template_path.display());
+    }
+    let content = std::fs::read_to_string(&template_path)?;
+    let config: ProjectConfig = toml::from_str(&content)?;
+    Ok(config)
+}
+
+pub fn run(name: &str, repo: Option<&str>, folder: Option<&str>, template: Option<&str>) -> anyhow::Result<()> {
     let config_path = paths::project_config_path(name);
     if config_path.exists() {
         bail!("Project '{}' already exists at {}", name, config_path.display());
@@ -17,22 +25,30 @@ pub fn run(name: &str, repo: Option<&str>, folder: Option<&str>) -> anyhow::Resu
             .to_string(),
     };
 
-    let project = ProjectConfig {
-        project: ProjectMeta {
-            name: name.to_string(),
-            repo: repo_path,
-            folder: folder.map(|f| f.to_string()),
-            icon: None,
+    let project = match template {
+        Some(tmpl) => {
+            let mut config = load_template(tmpl)?;
+            config.project.name = name.to_string();
+            config.project.repo = repo_path;
+            if let Some(f) = folder {
+                config.project.folder = Some(f.to_string());
+            }
+            config
+        }
+        None => ProjectConfig {
+            project: ProjectMeta {
+                name: name.to_string(),
+                repo: repo_path,
+                folder: folder.map(|f| f.to_string()),
+                icon: None,
+            },
+            env: EnvConfig::default(),
+            git: None,
+            ports: None,
+            services: None,
+            windows: vec![],
+            scratchpad: None,
         },
-        env: EnvConfig::default(),
-        git: None,
-        ports: None,
-        services: None,
-        windows: vec![WindowConfig {
-            name: None,
-            command: None,
-        }],
-        scratchpad: None,
     };
 
     if let Some(parent) = config_path.parent() {

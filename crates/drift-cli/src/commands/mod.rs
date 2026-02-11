@@ -1,9 +1,11 @@
+pub mod add;
 pub mod archive;
 pub mod close;
 pub mod commander;
 pub mod daemon;
 pub mod delete;
 pub mod env;
+pub mod events;
 pub mod init;
 pub mod list;
 pub mod logs;
@@ -11,6 +13,7 @@ pub mod niri_rules;
 pub mod notify;
 pub mod open;
 pub mod ports;
+pub mod remove;
 pub mod save;
 pub mod status;
 pub mod to;
@@ -42,12 +45,14 @@ pub enum Commands {
     Init {
         /// Project name
         name: String,
-        /// Repository path
-        #[arg(long)]
+        /// Repository path (default: current directory)
         repo: Option<String>,
         /// Folder group
         #[arg(long)]
         folder: Option<String>,
+        /// Template name (from ~/.config/drift/templates/)
+        #[arg(long, short)]
+        template: Option<String>,
     },
     /// List all projects
     List {
@@ -100,6 +105,24 @@ pub enum Commands {
         /// Project name (default: current workspace)
         name: Option<String>,
     },
+    /// View event stream
+    Events {
+        /// Filter by event type (supports * glob, e.g. "agent.*")
+        #[arg(long, short = 't')]
+        r#type: Option<String>,
+        /// Number of events to show
+        #[arg(long, default_value = "20")]
+        last: usize,
+        /// Show events from all projects
+        #[arg(long)]
+        all: bool,
+        /// Follow live event stream
+        #[arg(short, long)]
+        follow: bool,
+        /// Project name (default: current)
+        #[arg(long)]
+        project: Option<String>,
+    },
     /// Regenerate niri-rules.kdl
     NiriRules,
     /// Run the drift daemon (for systemd, runs in foreground)
@@ -134,6 +157,16 @@ pub enum Commands {
         /// Project name (default: current)
         #[arg(long)]
         project: Option<String>,
+    },
+    /// Add items to a project (services, windows, env vars, ports)
+    Add {
+        #[command(subcommand)]
+        command: add::AddCommand,
+    },
+    /// Remove items from a project (services, windows, env vars, ports)
+    Remove {
+        #[command(subcommand)]
+        command: remove::RemoveCommand,
     },
     /// Show allocated ports for a project
     Ports {

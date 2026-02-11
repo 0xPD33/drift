@@ -10,6 +10,10 @@ pub fn projects_dir() -> PathBuf {
     config_dir().join("projects")
 }
 
+pub fn archived_projects_dir() -> PathBuf {
+    projects_dir().join("archived")
+}
+
 pub fn state_dir(project: &str) -> PathBuf {
     dirs::state_dir()
         .expect("could not determine state directory")

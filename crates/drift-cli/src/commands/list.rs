@@ -3,11 +3,19 @@ use std::collections::BTreeMap;
 use drift_core::config::resolve_repo_path;
 use drift_core::registry;
 
-pub fn run() -> anyhow::Result<()> {
-    let projects = registry::list_projects()?;
+pub fn run(archived: bool) -> anyhow::Result<()> {
+    let projects = if archived {
+        registry::list_archived()?
+    } else {
+        registry::list_projects()?
+    };
 
     if projects.is_empty() {
-        println!("No projects configured.");
+        if archived {
+            println!("No archived projects.");
+        } else {
+            println!("No projects configured.");
+        }
         return Ok(());
     }
 

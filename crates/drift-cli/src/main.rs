@@ -17,9 +17,12 @@ fn main() -> anyhow::Result<()> {
         Commands::Init { name, repo, folder } => {
             commands::init::run(&name, repo.as_deref(), folder.as_deref())
         }
-        Commands::List => commands::list::run(),
+        Commands::List { archived } => commands::list::run(archived),
         Commands::Open { name } => commands::open::run(&name),
         Commands::Close { name } => commands::close::run(name.as_deref()),
+        Commands::Archive { name } => commands::archive::archive(&name),
+        Commands::Unarchive { name } => commands::archive::unarchive(&name),
+        Commands::Delete { name, yes } => commands::delete::run(&name, yes),
         Commands::Save { name } => commands::save::run(name.as_deref()),
         Commands::Status => commands::status::run(),
         Commands::To { name } => commands::to::run(&name),

@@ -1,6 +1,8 @@
+pub mod archive;
 pub mod close;
 pub mod commander;
 pub mod daemon;
+pub mod delete;
 pub mod env;
 pub mod init;
 pub mod list;
@@ -48,7 +50,11 @@ pub enum Commands {
         folder: Option<String>,
     },
     /// List all projects
-    List,
+    List {
+        /// Show archived projects instead
+        #[arg(long)]
+        archived: bool,
+    },
     /// Open a project workspace
     Open {
         /// Project name
@@ -58,6 +64,24 @@ pub enum Commands {
     Close {
         /// Project name (default: current workspace)
         name: Option<String>,
+    },
+    /// Archive a project (reversible)
+    Archive {
+        /// Project name
+        name: String,
+    },
+    /// Restore an archived project
+    Unarchive {
+        /// Project name
+        name: String,
+    },
+    /// Permanently delete a project and its state
+    Delete {
+        /// Project name
+        name: String,
+        /// Skip confirmation
+        #[arg(long)]
+        yes: bool,
     },
     /// Save current workspace state
     Save {

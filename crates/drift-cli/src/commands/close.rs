@@ -5,20 +5,19 @@ use drift_core::{niri, paths};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 
-pub fn run(name: Option<&str>) -> anyhow::Result<()> {
-    let project_name = resolve_project_name(name)?;
+/// Stop supervisor, close windows, unset workspace name, clean up state.
+/// Does NOT emit events or print summary — callers handle that.
+pub fn close_project(project_name: &str) -> anyhow::Result<()> {
     let mut niri_client = niri::NiriClient::connect()?;
 
     // Stop supervisor (which stops all services)
-    let supervisor_pid_path = paths::supervisor_pid_path(&project_name);
+    let supervisor_pid_path = paths::supervisor_pid_path(project_name);
     if supervisor_pid_path.exists() {
         if let Ok(pid_str) = fs::read_to_string(&supervisor_pid_path) {
             if let Ok(pid) = pid_str.trim().parse::<i32>() {
                 if signal::kill(Pid::from_raw(pid), None).is_ok() {
-                    // Send SIGTERM — supervisor handles graceful cascade
                     let _ = signal::kill(Pid::from_raw(pid), Signal::SIGTERM);
 
-                    // Wait for supervisor to exit (up to 10 seconds)
                     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
                     while std::time::Instant::now() < deadline {
                         if signal::kill(Pid::from_raw(pid), None).is_err() {
@@ -27,7 +26,6 @@ pub fn run(name: Option<&str>) -> anyhow::Result<()> {
                         std::thread::sleep(std::time::Duration::from_millis(200));
                     }
 
-                    // SIGKILL if still alive
                     if signal::kill(Pid::from_raw(pid), None).is_ok() {
                         let _ = signal::kill(Pid::from_raw(pid), Signal::SIGKILL);
                     }
@@ -42,10 +40,10 @@ pub fn run(name: Option<&str>) -> anyhow::Result<()> {
     }
 
     // Clean up state file
-    let _ = fs::remove_file(paths::services_state_path(&project_name));
+    let _ = fs::remove_file(paths::services_state_path(project_name));
 
     // Close all windows on the workspace
-    if let Some(ws) = niri_client.find_workspace_by_name(&project_name)? {
+    if let Some(ws) = niri_client.find_workspace_by_name(project_name)? {
         let ws_id = ws.id;
         let windows = niri_client.windows()?;
         for win in &windows {
@@ -56,7 +54,15 @@ pub fn run(name: Option<&str>) -> anyhow::Result<()> {
     }
 
     // Unset workspace name so it becomes dynamic and gets auto-removed
-    let _ = niri_client.unset_workspace_name(&project_name);
+    let _ = niri_client.unset_workspace_name(project_name);
+
+    Ok(())
+}
+
+pub fn run(name: Option<&str>) -> anyhow::Result<()> {
+    let project_name = resolve_project_name(name)?;
+
+    close_project(&project_name)?;
 
     drift_core::events::try_emit_event(&drift_core::events::Event {
         event_type: "drift.project.closed".into(),

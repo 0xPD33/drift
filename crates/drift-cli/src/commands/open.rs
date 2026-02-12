@@ -201,6 +201,10 @@ pub fn run(name: &str) -> anyhow::Result<()> {
         priority: None,
     });
 
+    if let Err(e) = drift_core::session::add_project(name) {
+        eprintln!("  Warning: could not update session: {e}");
+    }
+
     println!("Opened project '{name}'");
     Ok(())
 }

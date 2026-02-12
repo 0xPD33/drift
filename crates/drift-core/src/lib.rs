@@ -8,5 +8,6 @@ pub mod kdl;
 pub mod niri;
 pub mod paths;
 pub mod registry;
+pub mod session;
 pub mod supervisor;
 pub mod workspace;

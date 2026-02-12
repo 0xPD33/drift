@@ -37,6 +37,7 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Add { command } => commands::add::run(command),
         Commands::Remove { command } => commands::remove::run(command),
+        Commands::Restore { name } => commands::restore::run(name.as_deref()),
         Commands::Ports { project } => commands::ports::run(project.as_deref()),
         Commands::Notify { project, r#type, source, level, title, body } => {
             commands::notify::run(project.as_deref(), &r#type, &source, &level, &title, &body)

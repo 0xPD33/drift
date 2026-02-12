@@ -14,6 +14,7 @@ pub mod notify;
 pub mod open;
 pub mod ports;
 pub mod remove;
+pub mod restore;
 pub mod save;
 pub mod status;
 pub mod to;
@@ -167,6 +168,11 @@ pub enum Commands {
     Remove {
         #[command(subcommand)]
         command: remove::RemoveCommand,
+    },
+    /// Restore previously-open projects
+    Restore {
+        /// Project name (omit to restore entire session)
+        name: Option<String>,
     },
     /// Show allocated ports for a project
     Ports {

@@ -97,6 +97,10 @@ pub fn commander_state_path() -> PathBuf {
     state_base_dir().join("commander.json")
 }
 
+pub fn session_path() -> PathBuf {
+    state_base_dir().join("session.json")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -8,6 +8,11 @@ use nix::unistd::Pid;
 /// Stop supervisor, close windows, unset workspace name, clean up state.
 /// Does NOT emit events or print summary — callers handle that.
 pub fn close_project(project_name: &str) -> anyhow::Result<()> {
+    // Auto-save workspace state before teardown
+    if let Err(e) = drift_core::workspace::save_workspace(project_name) {
+        eprintln!("  Warning: could not save workspace: {e}");
+    }
+
     let mut niri_client = niri::NiriClient::connect()?;
 
     // Stop supervisor (which stops all services)
@@ -63,6 +68,10 @@ pub fn run(name: Option<&str>) -> anyhow::Result<()> {
     let project_name = resolve_project_name(name)?;
 
     close_project(&project_name)?;
+
+    if let Err(e) = drift_core::session::remove_project(&project_name) {
+        eprintln!("  Warning: could not update session: {e}");
+    }
 
     drift_core::events::try_emit_event(&drift_core::events::Event {
         event_type: "drift.project.closed".into(),

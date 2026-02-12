@@ -1,3 +1,5 @@
+pub mod agent;
+pub mod claude_trust;
 pub mod commander;
 pub mod config;
 pub mod env;

@@ -122,14 +122,14 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     let repo_str = repo_path.to_string_lossy();
 
     if project.windows.is_empty() {
-        let full_cmd = build_terminal_command(terminal, name, &export_str, &repo_str, None);
-        niri_client.spawn(vec!["sh".into(), "-c".into(), full_cmd])?;
+        let args = build_terminal_args(terminal, name, &export_str, &repo_str, None);
+        niri_client.spawn(args)?;
         println!("  Spawned default terminal window");
     } else {
         for window in &project.windows {
             let cmd = window.command.as_deref().filter(|c| !c.is_empty());
-            let full_cmd = build_terminal_command(terminal, name, &export_str, &repo_str, cmd);
-            niri_client.spawn(vec!["sh".into(), "-c".into(), full_cmd])?;
+            let args = build_terminal_args(terminal, name, &export_str, &repo_str, cmd);
+            niri_client.spawn(args)?;
 
             let label = window
                 .name
@@ -137,6 +137,33 @@ pub fn run(name: &str) -> anyhow::Result<()> {
                 .or(window.command.as_deref())
                 .unwrap_or("shell");
             println!("  Spawned window '{label}'");
+        }
+    }
+
+    // Pre-trust the repo for Claude Code so interactive agents skip the trust dialog
+    if let Err(e) = drift_core::claude_trust::ensure_claude_trust(&repo_path) {
+        eprintln!("Warning: failed to pre-trust repo for Claude Code: {e}");
+    }
+
+    // Spawn interactive agents as terminal windows
+    if let Some(ref services) = project.services {
+        for svc in &services.processes {
+            if drift_core::agent::is_interactive_agent(svc) {
+                let agent_cmd = drift_core::agent::build_agent_command(svc, name);
+                let args = build_terminal_args(
+                    terminal,
+                    name,
+                    &export_str,
+                    &repo_str,
+                    Some(&agent_cmd),
+                );
+                niri_client.spawn(args)?;
+                println!(
+                    "  Spawned interactive agent '{}' ({})",
+                    svc.name,
+                    svc.agent.as_deref().unwrap_or("unknown")
+                );
+            }
         }
     }
 
@@ -156,27 +183,34 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn build_terminal_command(
+fn build_terminal_args(
     terminal: &str,
     project_name: &str,
     export_str: &str,
     repo_path: &str,
     command: Option<&str>,
-) -> String {
+) -> Vec<String> {
     let title_flag = match terminal {
-        "foot" => format!("--title \"drift:{project_name}\""),
-        "ghostty" => format!("--title=\"drift:{project_name}\""),
-        _ => format!("--title \"drift:{project_name}\""),
+        "foot" => format!("--title=drift:{project_name}"),
+        "ghostty" => format!("--title=drift:{project_name}"),
+        _ => format!("--title=drift:{project_name}"),
     };
 
-    let exec_flag = match command {
-        Some(cmd) => format!(" -e {cmd}"),
-        None => String::new(),
+    // Build the shell script that runs inside the terminal.
+    // This ensures env vars, cwd, and the command all run in a proper shell.
+    let inner_script = match command {
+        Some(cmd) => format!("{export_str}\ncd {repo_path}\nexec {cmd}"),
+        None => format!("{export_str}\ncd {repo_path}\nexec $SHELL"),
     };
 
-    format!(
-        "{export_str} && cd {repo_path} && exec {terminal} {title_flag}{exec_flag}"
-    )
+    vec![
+        terminal.into(),
+        title_flag,
+        "-e".into(),
+        "sh".into(),
+        "-c".into(),
+        inner_script,
+    ]
 }
 
 fn check_port_conflicts(

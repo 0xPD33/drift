@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{self, RestartPolicy, ServiceProcess};
 use crate::events::{self, Event};
-use crate::{env, paths};
+use crate::{agent, env, paths};
 
 // --- Public types (serialized to services.json) ---
 
@@ -33,6 +33,9 @@ pub struct ServiceState {
     pub restart_count: u32,
     pub started_at: Option<String>,
     pub exit_code: Option<i32>,
+    #[serde(default)]
+    pub is_agent: bool,
+    pub agent_type: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -102,6 +105,15 @@ pub fn run_supervisor(project_name: &str) -> anyhow::Result<()> {
         Some(svc_config) if !svc_config.processes.is_empty() => svc_config.processes,
         _ => return Ok(()),
     };
+
+    // Filter out interactive agents (they get spawned as windows, not services)
+    let processes: Vec<_> = processes.into_iter()
+        .filter(|s| !agent::is_interactive_agent(s))
+        .collect();
+
+    if processes.is_empty() {
+        return Ok(());
+    }
 
     let mut services: Vec<ManagedService> = Vec::with_capacity(processes.len());
     for proc in processes {
@@ -331,6 +343,12 @@ fn spawn_service(
     let logs_dir = paths::logs_dir(project);
     let log_path = logs_dir.join(format!("{}.log", svc.name));
 
+    let command = if svc.agent.is_some() {
+        agent::build_agent_command(svc, project)
+    } else {
+        svc.command.clone()
+    };
+
     let mut log_file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -346,7 +364,7 @@ fn spawn_service(
 
     let child = unsafe {
         Command::new("sh")
-            .args(["-c", &svc.command])
+            .args(["-c", &command])
             .envs(env_vars)
             .current_dir(&svc_cwd)
             .stdout(log_file)
@@ -434,6 +452,8 @@ fn write_state(services: &[ManagedService], project: &str) {
                 restart_count: s.restart_count,
                 started_at: s.started_at_system.map(format_time),
                 exit_code: s.exit_code,
+                is_agent: s.config.agent.is_some(),
+                agent_type: s.config.agent.clone(),
             })
             .collect(),
     };

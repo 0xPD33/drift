@@ -121,22 +121,31 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     let export_str = env::format_env_exports(&env_vars);
     let repo_str = repo_path.to_string_lossy();
 
+    // Collect (title, width) pairs for windows that need sizing after spawn
+    let mut width_requests: Vec<(String, niri_ipc::SizeChange)> = Vec::new();
+
     if project.windows.is_empty() {
-        let args = build_terminal_args(terminal, name, &export_str, &repo_str, None);
+        let args = build_terminal_args(terminal, name, None, &export_str, &repo_str, None);
         niri_client.spawn(args)?;
         println!("  Spawned default terminal window");
     } else {
         for window in &project.windows {
             let cmd = window.command.as_deref().filter(|c| !c.is_empty());
-            let args = build_terminal_args(terminal, name, &export_str, &repo_str, cmd);
+            let wn = window.name.as_deref();
+            let args = build_terminal_args(terminal, name, wn, &export_str, &repo_str, cmd);
             niri_client.spawn(args)?;
 
-            let label = window
-                .name
-                .as_deref()
+            let label = wn
                 .or(window.command.as_deref())
                 .unwrap_or("shell");
             println!("  Spawned window '{label}'");
+
+            if let (Some(wn), Some(width_str)) = (wn, window.width.as_deref()) {
+                if let Some(change) = niri::parse_width(width_str) {
+                    let title = format!("drift:{name}/{wn}");
+                    width_requests.push((title, change));
+                }
+            }
         }
     }
 
@@ -153,6 +162,7 @@ pub fn run(name: &str) -> anyhow::Result<()> {
                 let args = build_terminal_args(
                     terminal,
                     name,
+                    Some(&svc.name),
                     &export_str,
                     &repo_str,
                     Some(&agent_cmd),
@@ -163,8 +173,20 @@ pub fn run(name: &str) -> anyhow::Result<()> {
                     svc.name,
                     svc.agent.as_deref().unwrap_or("unknown")
                 );
+
+                if let Some(width_str) = svc.width.as_deref() {
+                    if let Some(change) = niri::parse_width(width_str) {
+                        let title = format!("drift:{name}/{}", svc.name);
+                        width_requests.push((title, change));
+                    }
+                }
             }
         }
+    }
+
+    // Apply window widths via IPC (windows need time to register with niri)
+    if !width_requests.is_empty() {
+        apply_window_widths(&mut niri_client, &width_requests);
     }
 
     drift_core::events::try_emit_event(&drift_core::events::Event {
@@ -186,15 +208,16 @@ pub fn run(name: &str) -> anyhow::Result<()> {
 fn build_terminal_args(
     terminal: &str,
     project_name: &str,
+    window_name: Option<&str>,
     export_str: &str,
     repo_path: &str,
     command: Option<&str>,
 ) -> Vec<String> {
-    let title_flag = match terminal {
-        "foot" => format!("--title=drift:{project_name}"),
-        "ghostty" => format!("--title=drift:{project_name}"),
-        _ => format!("--title=drift:{project_name}"),
+    let title = match window_name {
+        Some(wn) => format!("drift:{project_name}/{wn}"),
+        None => format!("drift:{project_name}"),
     };
+    let title_flag = format!("--title={title}");
 
     // Build the shell script that runs inside the terminal.
     // This ensures env vars, cwd, and the command all run in a proper shell.
@@ -252,6 +275,47 @@ fn check_port_conflicts(
                 other.project.name
             );
         }
+    }
+}
+
+fn apply_window_widths(
+    niri_client: &mut niri::NiriClient,
+    requests: &[(String, niri_ipc::SizeChange)],
+) {
+    // Wait for windows to register with niri
+    std::thread::sleep(Duration::from_millis(500));
+
+    let mut pending: Vec<&(String, niri_ipc::SizeChange)> = requests.iter().collect();
+
+    for attempt in 0..5 {
+        if pending.is_empty() {
+            break;
+        }
+        if attempt > 0 {
+            std::thread::sleep(Duration::from_millis(300));
+        }
+
+        let mut still_pending = Vec::new();
+        for req in &pending {
+            match niri_client.find_window_by_title(&req.0) {
+                Ok(Some(window)) => {
+                    if let Err(e) = niri_client.set_window_width(window.id, req.1) {
+                        eprintln!("  Warning: failed to set width for '{}': {e}", req.0);
+                    }
+                }
+                Ok(None) => {
+                    still_pending.push(*req);
+                }
+                Err(e) => {
+                    eprintln!("  Warning: failed to find window '{}': {e}", req.0);
+                }
+            }
+        }
+        pending = still_pending;
+    }
+
+    for req in &pending {
+        eprintln!("  Warning: window '{}' not found for width setting", req.0);
     }
 }
 

@@ -94,6 +94,7 @@ pub fn run(cmd: AddCommand) -> anyhow::Result<()> {
                 agent_mode: "oneshot".into(),
                 agent_model: None,
                 agent_permissions: "full".into(),
+                width: None,
             });
             config::save_project_config(&proj, &cfg)?;
             println!("Added service '{name}' to project '{proj}'");
@@ -117,6 +118,7 @@ pub fn run(cmd: AddCommand) -> anyhow::Result<()> {
                 agent_mode: mode,
                 agent_model: model,
                 agent_permissions: permissions,
+                width: None,
             });
             config::save_project_config(&proj, &cfg)?;
             println!("Added agent '{name}' to project '{proj}'");
@@ -131,6 +133,7 @@ pub fn run(cmd: AddCommand) -> anyhow::Result<()> {
             cfg.windows.push(WindowConfig {
                 name: Some(name.clone()),
                 command,
+                width: None,
             });
             config::save_project_config(&proj, &cfg)?;
             println!("Added window '{name}' to project '{proj}'");
@@ -228,6 +231,7 @@ mod tests {
             agent_mode: "oneshot".into(),
             agent_model: None,
             agent_permissions: "full".into(),
+            width: None,
         });
         assert_eq!(cfg.services.as_ref().unwrap().processes.len(), 1);
         assert_eq!(cfg.services.as_ref().unwrap().processes[0].name, "api");
@@ -248,6 +252,7 @@ mod tests {
                 agent_mode: "oneshot".into(),
                 agent_model: None,
                 agent_permissions: "full".into(),
+                width: None,
             }],
         });
         let has_dup = cfg.services.as_ref().unwrap().processes.iter().any(|p| p.name == "api");
@@ -269,6 +274,7 @@ mod tests {
             agent_mode: "interactive".into(),
             agent_model: Some("opus".into()),
             agent_permissions: "safe".into(),
+            width: None,
         });
         let svc = &cfg.services.as_ref().unwrap().processes[0];
         assert_eq!(svc.agent.as_deref(), Some("claude"));
@@ -281,7 +287,7 @@ mod tests {
     #[test]
     fn add_window_duplicate_detection() {
         let mut cfg = minimal_config("test");
-        cfg.windows.push(WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()) });
+        cfg.windows.push(WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None });
         let has_dup = cfg.windows.iter().any(|w| w.name.as_deref() == Some("editor"));
         assert!(has_dup);
     }

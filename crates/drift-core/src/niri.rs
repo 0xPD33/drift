@@ -1,6 +1,23 @@
 use anyhow::{bail, Context};
 use niri_ipc::socket::Socket;
-use niri_ipc::{Action, Request, Response, Window, Workspace, WorkspaceReferenceArg};
+use niri_ipc::{Action, Request, Response, SizeChange, Window, Workspace, WorkspaceReferenceArg};
+
+/// Parse a width config string ("60%", "800px", "0.6") into a niri SizeChange.
+pub fn parse_width(width: &str) -> Option<SizeChange> {
+    let trimmed = width.trim();
+    if let Some(pct) = trimmed.strip_suffix('%') {
+        let val: f64 = pct.trim().parse().ok()?;
+        Some(SizeChange::SetProportion(val))
+    } else if let Some(px) = trimmed.strip_suffix("px") {
+        let val: i32 = px.trim().parse().ok()?;
+        Some(SizeChange::SetFixed(val))
+    } else if let Ok(val) = trimmed.parse::<f64>() {
+        // Bare float treated as proportion (0.6 → 60%)
+        Some(SizeChange::SetProportion(val * 100.0))
+    } else {
+        None
+    }
+}
 
 pub struct NiriClient {
     socket: Socket,
@@ -112,6 +129,25 @@ impl NiriClient {
         }
         self.set_workspace_name(name)?;
         Ok(())
+    }
+
+    pub fn find_window_by_title(&mut self, title: &str) -> anyhow::Result<Option<Window>> {
+        let windows = self.windows()?;
+        Ok(windows.into_iter().find(|w| w.title.as_deref() == Some(title)))
+    }
+
+    pub fn set_window_width(&mut self, id: u64, change: SizeChange) -> anyhow::Result<()> {
+        let reply = self
+            .socket
+            .send(Request::Action(Action::SetWindowWidth {
+                id: Some(id),
+                change,
+            }))?;
+        match reply {
+            Ok(Response::Handled) => Ok(()),
+            Ok(other) => bail!("unexpected response: {other:?}"),
+            Err(msg) => bail!("niri error: {msg}"),
+        }
     }
 
     pub fn unset_workspace_name(&mut self, name: &str) -> anyhow::Result<()> {

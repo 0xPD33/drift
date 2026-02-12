@@ -247,6 +247,7 @@ dependencies = [
  "dirs",
  "drift-core",
  "drift-daemon",
+ "niri-ipc",
  "nix",
  "serde",
  "serde_json",

@@ -150,6 +150,7 @@ mod tests {
                         agent_mode: "oneshot".into(),
                         agent_model: None,
                         agent_permissions: "full".into(),
+                        width: None,
                     },
                     ServiceProcess {
                         name: "worker".into(),
@@ -162,12 +163,13 @@ mod tests {
                         agent_mode: "oneshot".into(),
                         agent_model: None,
                         agent_permissions: "full".into(),
+                        width: None,
                     },
                 ],
             }),
             windows: vec![
-                WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()) },
-                WindowConfig { name: Some("shell".into()), command: None },
+                WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None },
+                WindowConfig { name: Some("shell".into()), command: None, width: None },
             ],
             scratchpad: None,
         }

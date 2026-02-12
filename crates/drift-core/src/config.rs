@@ -229,6 +229,8 @@ pub struct ServiceProcess {
     pub agent_model: Option<String>,
     #[serde(default = "default_agent_permissions", skip_serializing_if = "is_default_agent_permissions")]
     pub agent_permissions: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<String>,
 }
 
 fn default_cwd() -> String {
@@ -274,6 +276,8 @@ pub struct WindowConfig {
     pub name: Option<String>,
     #[serde(default)]
     pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -612,9 +616,10 @@ replay_on_subscribe = 10
                     agent_mode: "oneshot".into(),
                     agent_model: None,
                     agent_permissions: "full".into(),
+                    width: None,
                 }],
             }),
-            windows: vec![WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()) }],
+            windows: vec![WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None }],
             scratchpad: None,
         };
 
@@ -714,6 +719,7 @@ replay_on_subscribe = 10
                     agent_mode: "oneshot".into(),
                     agent_model: None,
                     agent_permissions: "full".into(),
+                    width: None,
                 }],
             }),
             windows: vec![],
@@ -754,6 +760,7 @@ replay_on_subscribe = 10
                     agent_mode: "oneshot".into(),
                     agent_model: Some("opus".into()),
                     agent_permissions: "safe".into(),
+                    width: None,
                 }],
             }),
             windows: vec![],

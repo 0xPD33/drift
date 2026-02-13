@@ -24,6 +24,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Unarchive { name } => commands::archive::unarchive(&name),
         Commands::Delete { name, yes } => commands::delete::run(&name, yes),
         Commands::Save { name } => commands::save::run(name.as_deref()),
+        Commands::ShellData => commands::shell_data::run(),
         Commands::Status => commands::status::run(),
         Commands::To { name } => commands::to::run(&name),
         Commands::Env { name } => commands::env::run(name.as_deref()),

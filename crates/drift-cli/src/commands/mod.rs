@@ -16,6 +16,7 @@ pub mod ports;
 pub mod remove;
 pub mod restore;
 pub mod save;
+pub mod shell_data;
 pub mod status;
 pub mod to;
 
@@ -94,6 +95,8 @@ pub enum Commands {
         /// Project name (default: current workspace)
         name: Option<String>,
     },
+    /// Output project/service/agent state as JSON (for shell integration)
+    ShellData,
     /// Show status of current project
     Status,
     /// Switch to another project (saves current first)

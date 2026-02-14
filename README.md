@@ -27,6 +27,13 @@ Most developers juggle multiple projects by manually arranging terminals, starti
 Requires Nix with flakes enabled:
 
 ```bash
+# Run directly
+nix run github:0xPD33/drift -- open myapp
+
+# Or install
+nix profile install github:0xPD33/drift
+
+# Or build from source
 nix develop  # enters dev shell with cargo
 cargo build --release
 # Binary: ./target/release/drift

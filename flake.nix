@@ -1,4 +1,6 @@
 {
+  description = "Project-oriented workspace isolation for the Niri Wayland compositor";
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     crane.url = "github:ipetkov/crane";

@@ -1,0 +1,6 @@
+{
+  "name": "drift",
+  "description": "Full drift CLI reference for AI agents working inside drift workspaces",
+  "version": "0.2.0",
+  "keywords": ["drift", "niri", "workspace", "services", "agents", "tts"]
+}

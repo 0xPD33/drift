@@ -1,6 +1,0 @@
-{
-  "name": "drift-agent",
-  "description": "Announce agent work via drift event bus and commander TTS",
-  "version": "0.1.0",
-  "keywords": ["drift", "tts", "notifications", "agent"]
-}

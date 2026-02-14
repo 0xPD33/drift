@@ -2,6 +2,9 @@
 name = "drift-cli"
 version = "0.1.0"
 edition = "2021"
+description = "CLI for drift workspace manager"
+license = "MIT"
+repository = "https://github.com/0xPD33/drift"
 
 [[bin]]
 name = "drift"

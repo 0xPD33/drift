@@ -8,22 +8,22 @@ All commands must run inside the nix shell — cargo is not available outside it
 
 ```bash
 # Type check
-nix develop /home/paddy/dev/rust/drift --command bash -c "cd /home/paddy/dev/rust/drift && cargo check 2>&1"
+nix develop . --command cargo check
 
 # Build
-nix develop /home/paddy/dev/rust/drift --command bash -c "cd /home/paddy/dev/rust/drift && cargo build 2>&1"
+nix develop . --command cargo build
 
 # Run all tests
-nix develop /home/paddy/dev/rust/drift --command bash -c "cd /home/paddy/dev/rust/drift && cargo test 2>&1"
+nix develop . --command cargo test
 
 # Run a single test by name
-nix develop /home/paddy/dev/rust/drift --command bash -c "cd /home/paddy/dev/rust/drift && cargo test test_name 2>&1"
+nix develop . --command cargo test test_name
 
 # Run tests for a specific crate
-nix develop /home/paddy/dev/rust/drift --command bash -c "cd /home/paddy/dev/rust/drift && cargo test -p drift-core 2>&1"
+nix develop . --command cargo test -p drift-core
 
 # Clippy
-nix develop /home/paddy/dev/rust/drift --command bash -c "cd /home/paddy/dev/rust/drift && cargo clippy 2>&1"
+nix develop . --command cargo clippy
 ```
 
 The binary name is `drift` (configured via `[[bin]]` in drift-cli/Cargo.toml).

@@ -4,5 +4,6 @@
 *.swo
 *~
 .direnv/
+.claude/
 result
 result-*

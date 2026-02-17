@@ -88,6 +88,7 @@ mod tests {
             ports: None,
             services: None,
             windows: vec![],
+            tmux: None,
             scratchpad: None,
         }
     }

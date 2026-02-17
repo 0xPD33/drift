@@ -524,3 +524,42 @@ fn full_lifecycle() {
     assert!(cfg.contains("NODE_ENV = \"development\""));
     assert!(cfg.contains("range = [") && cfg.contains("3000") && cfg.contains("3010"));
 }
+
+// ── Tmux ──
+
+#[test]
+fn add_window_with_tmux() {
+    let t = TestEnv::new();
+    t.run_ok(&["init", "myapp"]);
+    t.run_ok(&["add", "window", "editor", "nvim .", "--tmux", "--project", "myapp"]);
+    let cfg = t.read_config("myapp");
+    assert!(cfg.contains("name = \"editor\""));
+    assert!(cfg.contains("command = \"nvim .\""));
+    assert!(cfg.contains("tmux = true"));
+}
+
+#[test]
+fn add_window_without_tmux_has_no_tmux_field() {
+    let t = TestEnv::new();
+    t.run_ok(&["init", "myapp"]);
+    t.run_ok(&["add", "window", "shell", "--project", "myapp"]);
+    let cfg = t.read_config("myapp");
+    assert!(cfg.contains("name = \"shell\""));
+    assert!(!cfg.contains("tmux"));
+}
+
+#[test]
+fn tmux_config_roundtrip() {
+    let t = TestEnv::new();
+    t.run_ok(&["init", "myapp"]);
+    // Write a config with [tmux] section manually
+    let config_path = t.project_config_path("myapp");
+    let content = std::fs::read_to_string(&config_path).unwrap();
+    let new_content = format!("{content}\n[tmux]\nkill_on_close = true\n");
+    std::fs::write(&config_path, new_content).unwrap();
+    // Verify it parses by adding a window (which loads + saves config)
+    t.run_ok(&["add", "window", "editor", "--tmux", "--project", "myapp"]);
+    let cfg = t.read_config("myapp");
+    assert!(cfg.contains("kill_on_close = true"));
+    assert!(cfg.contains("tmux = true"));
+}

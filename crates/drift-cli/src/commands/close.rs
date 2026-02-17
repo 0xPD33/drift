@@ -1,7 +1,8 @@
 use std::fs;
+use std::process::{Command, Stdio};
 
 use anyhow::bail;
-use drift_core::{niri, paths};
+use drift_core::{config, niri, paths};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 
@@ -11,6 +12,32 @@ pub fn close_project(project_name: &str) -> anyhow::Result<()> {
     // Auto-save workspace state before teardown
     if let Err(e) = drift_core::workspace::save_workspace(project_name) {
         eprintln!("  Warning: could not save workspace: {e}");
+    }
+
+    // Kill tmux session if configured
+    if let Ok(cfg) = config::load_project_config(project_name) {
+        if let Some(tmux_cfg) = cfg.tmux {
+            if tmux_cfg.kill_on_close {
+                let session_name = format!("drift:{project_name}");
+                let has_session = Command::new("tmux")
+                    .args(["has-session", "-t", &session_name])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+
+                if has_session {
+                    let result = Command::new("tmux")
+                        .args(["kill-session", "-t", &session_name])
+                        .status();
+
+                    if result.map(|s| s.success()).unwrap_or(false) {
+                        println!("  Killed tmux session '{session_name}'");
+                    }
+                }
+            }
+        }
     }
 
     let mut niri_client = niri::NiriClient::connect()?;

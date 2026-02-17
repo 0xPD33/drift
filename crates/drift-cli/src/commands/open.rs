@@ -121,15 +121,22 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     let export_str = env::format_env_exports(&env_vars);
     let repo_str = repo_path.to_string_lossy();
 
+    // Partition windows into tmux and normal
+    let (tmux_windows, normal_windows): (Vec<_>, Vec<_>) = project
+        .windows
+        .iter()
+        .partition(|w| w.tmux == Some(true));
+
     // Collect (title, width) pairs for windows that need sizing after spawn
     let mut width_requests: Vec<(String, niri_ipc::SizeChange)> = Vec::new();
 
-    if project.windows.is_empty() {
+    if normal_windows.is_empty() && tmux_windows.is_empty() {
         let args = build_terminal_args(terminal, name, None, &export_str, &repo_str, None);
         niri_client.spawn(args)?;
         println!("  Spawned default terminal window");
     } else {
-        for window in &project.windows {
+        // Spawn normal windows
+        for window in &normal_windows {
             let cmd = window.command.as_deref().filter(|c| !c.is_empty());
             let wn = window.name.as_deref();
             let args = build_terminal_args(terminal, name, wn, &export_str, &repo_str, cmd);
@@ -146,6 +153,18 @@ pub fn run(name: &str) -> anyhow::Result<()> {
                     width_requests.push((title, change));
                 }
             }
+        }
+
+        // Spawn tmux windows
+        if !tmux_windows.is_empty() {
+            spawn_tmux_windows(
+                name,
+                terminal,
+                &export_str,
+                &repo_str,
+                &tmux_windows,
+                &mut niri_client,
+            )?;
         }
     }
 
@@ -206,6 +225,91 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     }
 
     println!("Opened project '{name}'");
+    Ok(())
+}
+
+fn tmux_session_name(project: &str) -> String {
+    format!("drift:{project}")
+}
+
+fn tmux_session_exists(session: &str) -> bool {
+    Command::new("tmux")
+        .args(["has-session", "-t", session])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+fn spawn_tmux_windows(
+    project_name: &str,
+    terminal: &str,
+    export_str: &str,
+    repo_path: &str,
+    tmux_windows: &[&config::WindowConfig],
+    niri_client: &mut niri::NiriClient,
+) -> anyhow::Result<()> {
+    let session = tmux_session_name(project_name);
+
+    if tmux_session_exists(&session) {
+        // Hot restore: session already exists, just attach
+        let args = build_terminal_args(terminal, project_name, Some("tmux"), export_str, repo_path, Some(&format!("tmux attach -t '{session}'")));
+        niri_client.spawn(args)?;
+        println!("  Attached to existing tmux session '{session}'");
+        return Ok(());
+    }
+
+    // Cold boot: create new session
+    let first_window = &tmux_windows[0];
+    let first_cmd = first_window.command.as_deref().unwrap_or("$SHELL");
+    let first_name = first_window.name.as_deref().unwrap_or("shell");
+
+    // Build inner script for first window
+    let inner_script = format!("{export_str}\ncd {repo_path}\nexec {first_cmd}");
+
+    // Create session with first window
+    Command::new("tmux")
+        .args([
+            "new-session",
+            "-d",
+            "-s",
+            &session,
+            "-n",
+            first_name,
+            "sh",
+            "-c",
+            &inner_script,
+        ])
+        .status()
+        .context("creating tmux session")?;
+
+    // Add remaining windows
+    for window in &tmux_windows[1..] {
+        let cmd = window.command.as_deref().unwrap_or("$SHELL");
+        let name = window.name.as_deref().unwrap_or("shell");
+        let inner_script = format!("{export_str}\ncd {repo_path}\nexec {cmd}");
+
+        Command::new("tmux")
+            .args([
+                "new-window",
+                "-t",
+                &session,
+                "-n",
+                name,
+                "sh",
+                "-c",
+                &inner_script,
+            ])
+            .status()
+            .context("creating tmux window")?;
+    }
+
+    // Spawn niri terminal that attaches to the session
+    let args = build_terminal_args(terminal, project_name, Some("tmux"), export_str, repo_path, Some(&format!("tmux attach -t '{session}'")));
+    niri_client.spawn(args)?;
+    println!("  Created tmux session '{session}' with {} window(s)", tmux_windows.len());
+
     Ok(())
 }
 

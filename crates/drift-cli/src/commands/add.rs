@@ -40,6 +40,8 @@ pub enum AddCommand {
         /// Command to run (empty for shell)
         command: Option<String>,
         #[arg(long)]
+        tmux: bool,
+        #[arg(long)]
         project: Option<String>,
     },
     /// Add an environment variable
@@ -124,7 +126,7 @@ pub fn run(cmd: AddCommand) -> anyhow::Result<()> {
             println!("Added agent '{name}' to project '{proj}'");
             Ok(())
         }
-        AddCommand::Window { name, command, project } => {
+        AddCommand::Window { name, command, tmux, project } => {
             let proj = config::resolve_current_project(project.as_deref())?;
             let mut cfg = config::load_project_config(&proj)?;
             if cfg.windows.iter().any(|w| w.name.as_deref() == Some(&name)) {
@@ -134,6 +136,7 @@ pub fn run(cmd: AddCommand) -> anyhow::Result<()> {
                 name: Some(name.clone()),
                 command,
                 width: None,
+                tmux: if tmux { Some(true) } else { None },
             });
             config::save_project_config(&proj, &cfg)?;
             println!("Added window '{name}' to project '{proj}'");
@@ -212,6 +215,7 @@ mod tests {
             ports: None,
             services: None,
             windows: vec![],
+            tmux: None,
             scratchpad: None,
         }
     }
@@ -287,7 +291,7 @@ mod tests {
     #[test]
     fn add_window_duplicate_detection() {
         let mut cfg = minimal_config("test");
-        cfg.windows.push(WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None });
+        cfg.windows.push(WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None, tmux: None });
         let has_dup = cfg.windows.iter().any(|w| w.name.as_deref() == Some("editor"));
         assert!(has_dup);
     }

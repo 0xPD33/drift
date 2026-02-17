@@ -168,6 +168,8 @@ pub struct ProjectConfig {
     #[serde(default)]
     pub windows: Vec<WindowConfig>,
     #[serde(default)]
+    pub tmux: Option<TmuxConfig>,
+    #[serde(default)]
     pub scratchpad: Option<ScratchpadConfig>,
 }
 
@@ -278,6 +280,14 @@ pub struct WindowConfig {
     pub command: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub width: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tmux: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TmuxConfig {
+    #[serde(default)]
+    pub kill_on_close: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -619,7 +629,8 @@ replay_on_subscribe = 10
                     width: None,
                 }],
             }),
-            windows: vec![WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None }],
+            windows: vec![WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None, tmux: None }],
+            tmux: None,
             scratchpad: None,
         };
 
@@ -648,6 +659,7 @@ replay_on_subscribe = 10
             ports: None,
             services: None,
             windows: vec![],
+            tmux: None,
             scratchpad: None,
         };
         config.env.vars.insert("NODE_ENV".into(), "development".into());
@@ -677,6 +689,7 @@ replay_on_subscribe = 10
             }),
             services: None,
             windows: vec![],
+            tmux: None,
             scratchpad: None,
         };
 
@@ -723,6 +736,7 @@ replay_on_subscribe = 10
                 }],
             }),
             windows: vec![],
+            tmux: None,
             scratchpad: None,
         };
 
@@ -764,6 +778,7 @@ replay_on_subscribe = 10
                 }],
             }),
             windows: vec![],
+            tmux: None,
             scratchpad: None,
         };
 

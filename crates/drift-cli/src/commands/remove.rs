@@ -168,9 +168,10 @@ mod tests {
                 ],
             }),
             windows: vec![
-                WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None },
-                WindowConfig { name: Some("shell".into()), command: None, width: None },
+                WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None, tmux: None },
+                WindowConfig { name: Some("shell".into()), command: None, width: None, tmux: None },
             ],
+            tmux: None,
             scratchpad: None,
         }
     }

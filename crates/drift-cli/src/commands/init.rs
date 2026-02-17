@@ -48,6 +48,7 @@ pub fn run(name: &str, repo: Option<&str>, folder: Option<&str>, template: Optio
             services: None,
             windows: vec![],
             scratchpad: None,
+            tmux: None,
         },
     };
 

@@ -2,10 +2,21 @@ use std::collections::{HashMap, HashSet};
 
 use crate::config::{self, WindowConfig};
 
+fn infer_terminal_app_id<'a>(
+    running_windows: &'a [(String, Option<String>)],
+    terminal_name: &str,
+) -> Option<&'a str> {
+    let term_lower = terminal_name.to_lowercase();
+    running_windows
+        .iter()
+        .map(|(app_id, _)| app_id.as_str())
+        .find(|app_id| app_id.to_lowercase().contains(&term_lower))
+}
+
 pub fn sync_windows_to_config(
     project: &str,
     running_windows: &[(String, Option<String>)],
-    terminal_app_id: Option<&str>,
+    terminal_name: &str,
 ) -> anyhow::Result<bool> {
     let mut config = config::load_project_config(project)?;
 
@@ -21,6 +32,8 @@ pub fn sync_windows_to_config(
             *gui_budget.entry(app_id.clone()).or_insert(0) += 1;
         }
     }
+
+    let terminal_app_id = infer_terminal_app_id(running_windows, terminal_name);
 
     let mut existing_names: HashSet<String> = config
         .windows
@@ -128,7 +141,40 @@ fn strip_desktop_field_codes(exec: &str) -> String {
     for code in &codes {
         result = result.replace(code, "");
     }
-    result.split_whitespace().collect::<Vec<_>>().join(" ")
+    // Re-tokenize preserving quoted strings
+    let mut tokens = Vec::new();
+    let mut chars = result.chars().peekable();
+    while let Some(&c) = chars.peek() {
+        if c.is_whitespace() {
+            chars.next();
+            continue;
+        }
+        if c == '"' {
+            let mut token = String::new();
+            token.push(chars.next().unwrap());
+            while let Some(&ch) = chars.peek() {
+                token.push(chars.next().unwrap());
+                if ch == '"' && token.len() > 1 {
+                    break;
+                }
+            }
+            if !token.is_empty() {
+                tokens.push(token);
+            }
+        } else {
+            let mut token = String::new();
+            while let Some(&ch) = chars.peek() {
+                if ch.is_whitespace() {
+                    break;
+                }
+                token.push(chars.next().unwrap());
+            }
+            if !token.is_empty() {
+                tokens.push(token);
+            }
+        }
+    }
+    tokens.join(" ")
 }
 
 #[cfg(test)]
@@ -283,6 +329,25 @@ mod tests {
     fn strip_field_codes() {
         let cleaned = strip_desktop_field_codes("firefox %u --new-tab %U");
         assert_eq!(cleaned, "firefox --new-tab");
+    }
+
+    #[test]
+    fn strip_field_codes_quoted() {
+        let cleaned = strip_desktop_field_codes(r#""/usr/bin/my app" --profile %u"#);
+        assert_eq!(cleaned, r#""/usr/bin/my app" --profile"#);
+    }
+
+    #[test]
+    fn infer_terminal_from_name() {
+        let windows = vec![
+            ("com.mitchellh.ghostty".to_string(), None),
+            ("org.mozilla.firefox".to_string(), None),
+        ];
+        assert_eq!(
+            infer_terminal_app_id(&windows, "ghostty"),
+            Some("com.mitchellh.ghostty")
+        );
+        assert_eq!(infer_terminal_app_id(&windows, "alacritty"), None);
     }
 
     #[test]

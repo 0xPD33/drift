@@ -48,12 +48,12 @@ struct DaemonInner {
     focused_workspace_id: Option<u64>,
     events: HashMap<String, VecDeque<Event>>,
     buffer_size: usize,
-    terminal_app_ids: HashMap<String, String>,
+    terminal_name: String,
     subscriber_tx: mpsc::Sender<Event>,
 }
 
 impl DaemonInner {
-    fn new(subscriber_tx: mpsc::Sender<Event>, buffer_size: usize) -> Self {
+    fn new(subscriber_tx: mpsc::Sender<Event>, buffer_size: usize, terminal_name: String) -> Self {
         let known_projects: HashSet<String> = drift_core::registry::list_projects()
             .unwrap_or_default()
             .into_iter()
@@ -69,7 +69,7 @@ impl DaemonInner {
             focused_workspace_id: None,
             events: HashMap::new(),
             buffer_size,
-            terminal_app_ids: HashMap::new(),
+            terminal_name,
             subscriber_tx,
         }
     }
@@ -139,8 +139,7 @@ impl DaemonInner {
                                         Some((app_id, w.title.clone()))
                                     })
                                     .collect();
-                                let terminal_app_id = self.terminal_app_ids.get(&project).map(|s| s.as_str());
-                                if let Err(e) = drift_core::sync::sync_windows_to_config(&project, &running_windows, terminal_app_id) {
+                                if let Err(e) = drift_core::sync::sync_windows_to_config(&project, &running_windows, &self.terminal_name) {
                                     eprintln!("auto-sync windows for '{project}': {e}");
                                 }
 
@@ -291,33 +290,7 @@ impl DaemonInner {
     }
 
     fn handle_emit_event(&mut self, event: Event) {
-        if event.event_type == "drift.project.opened" {
-            self.detect_terminal_app_id(&event.project);
-        }
         self.process_event(event);
-    }
-
-    fn detect_terminal_app_id(&mut self, project: &str) {
-        let ws_id = match self.workspace_to_project.iter()
-            .find(|(_, p)| p.as_str() == project)
-            .map(|(id, _)| *id)
-        {
-            Some(id) => id,
-            None => return,
-        };
-
-        let mut counts: HashMap<String, usize> = HashMap::new();
-        for win in self.windows.values() {
-            if win.workspace_id == Some(ws_id) {
-                if let Some(app_id) = &win.app_id {
-                    *counts.entry(app_id.clone()).or_default() += 1;
-                }
-            }
-        }
-
-        if let Some((app_id, _)) = counts.into_iter().max_by_key(|(_, count)| *count) {
-            self.terminal_app_ids.insert(project.to_string(), app_id);
-        }
     }
 
     fn send_desktop_notification(&self, event: &Event) {
@@ -455,6 +428,7 @@ pub fn run_daemon() -> anyhow::Result<()> {
     let global_config = config::load_global_config().unwrap_or_default();
     let commander_enabled = global_config.commander.enabled;
     let events_config = global_config.events;
+    let terminal_name = global_config.defaults.terminal;
 
     let pid_path = paths::daemon_pid_path();
     if let Some(parent) = pid_path.parent() {
@@ -465,7 +439,7 @@ pub fn run_daemon() -> anyhow::Result<()> {
     let (msg_tx, msg_rx) = mpsc::channel::<DaemonMsg>();
     let (sub_tx, sub_rx) = mpsc::channel::<Event>();
 
-    let mut inner = DaemonInner::new(sub_tx, events_config.buffer_size);
+    let mut inner = DaemonInner::new(sub_tx, events_config.buffer_size, terminal_name);
 
     let tx_events = msg_tx.clone();
     let event_thread = thread::Builder::new()
@@ -541,7 +515,7 @@ mod tests {
             focused_workspace_id: None,
             events: HashMap::new(),
             buffer_size: 200,
-            terminal_app_ids: HashMap::new(),
+            terminal_name: "ghostty".into(),
             subscriber_tx: tx,
         }
     }

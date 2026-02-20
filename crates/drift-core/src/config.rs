@@ -307,7 +307,9 @@ pub fn load_project_config(name: &str) -> anyhow::Result<ProjectConfig> {
 pub fn save_project_config(name: &str, config: &ProjectConfig) -> anyhow::Result<()> {
     let path = paths::project_config_path(name);
     let toml_str = toml::to_string_pretty(config)?;
-    std::fs::write(&path, toml_str)?;
+    let tmp = path.with_extension("toml.tmp");
+    std::fs::write(&tmp, &toml_str)?;
+    std::fs::rename(&tmp, &path)?;
     Ok(())
 }
 

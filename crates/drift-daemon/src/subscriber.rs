@@ -27,7 +27,11 @@ pub fn run_subscriber_manager(
             return;
         }
     };
-    listener.set_nonblocking(true).expect("set nonblocking");
+    if let Err(e) = listener.set_nonblocking(true) {
+        eprintln!("failed to set subscribe socket nonblocking: {e}");
+        let _ = fs::remove_file(&sock_path);
+        return;
+    }
 
     let mut subscribers: Vec<UnixStream> = Vec::new();
     let mut replay_buffer: VecDeque<Event> = VecDeque::with_capacity(replay_count + 1);

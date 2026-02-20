@@ -48,6 +48,7 @@ struct DaemonInner {
     focused_workspace_id: Option<u64>,
     events: HashMap<String, VecDeque<Event>>,
     buffer_size: usize,
+    terminal_app_ids: HashMap<String, String>,
     subscriber_tx: mpsc::Sender<Event>,
 }
 
@@ -68,6 +69,7 @@ impl DaemonInner {
             focused_workspace_id: None,
             events: HashMap::new(),
             buffer_size,
+            terminal_app_ids: HashMap::new(),
             subscriber_tx,
         }
     }
@@ -128,6 +130,18 @@ impl DaemonInner {
                                     .collect();
                                 if let Err(e) = drift_core::workspace::write_snapshot(&project, windows) {
                                     eprintln!("auto-save workspace '{project}': {e}");
+                                }
+
+                                let running_windows: Vec<(String, Option<String>)> = self.windows.values()
+                                    .filter(|w| w.workspace_id == Some(prev_id))
+                                    .filter_map(|w| {
+                                        let app_id = w.app_id.clone()?;
+                                        Some((app_id, w.title.clone()))
+                                    })
+                                    .collect();
+                                let terminal_app_id = self.terminal_app_ids.get(&project).map(|s| s.as_str());
+                                if let Err(e) = drift_core::sync::sync_windows_to_config(&project, &running_windows, terminal_app_id) {
+                                    eprintln!("auto-sync windows for '{project}': {e}");
                                 }
 
                                 self.process_event(Event {
@@ -277,7 +291,33 @@ impl DaemonInner {
     }
 
     fn handle_emit_event(&mut self, event: Event) {
+        if event.event_type == "drift.project.opened" {
+            self.detect_terminal_app_id(&event.project);
+        }
         self.process_event(event);
+    }
+
+    fn detect_terminal_app_id(&mut self, project: &str) {
+        let ws_id = match self.workspace_to_project.iter()
+            .find(|(_, p)| p.as_str() == project)
+            .map(|(id, _)| *id)
+        {
+            Some(id) => id,
+            None => return,
+        };
+
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        for win in self.windows.values() {
+            if win.workspace_id == Some(ws_id) {
+                if let Some(app_id) = &win.app_id {
+                    *counts.entry(app_id.clone()).or_default() += 1;
+                }
+            }
+        }
+
+        if let Some((app_id, _)) = counts.into_iter().max_by_key(|(_, count)| *count) {
+            self.terminal_app_ids.insert(project.to_string(), app_id);
+        }
     }
 
     fn send_desktop_notification(&self, event: &Event) {
@@ -501,6 +541,7 @@ mod tests {
             focused_workspace_id: None,
             events: HashMap::new(),
             buffer_size: 200,
+            terminal_app_ids: HashMap::new(),
             subscriber_tx: tx,
         }
     }

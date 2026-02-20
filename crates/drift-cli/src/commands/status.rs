@@ -31,7 +31,7 @@ pub fn run() -> anyhow::Result<()> {
     println!("{project_name}{folder_suffix}");
 
     // Repo
-    let repo_path = config::resolve_repo_path(&project.project.repo);
+    let repo_path = config::resolve_repo_path(&project.project.repo)?;
     let repo_display = abbreviate_home(&repo_path.to_string_lossy());
     println!("  Repo: {repo_display}");
 

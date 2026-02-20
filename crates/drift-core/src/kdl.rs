@@ -257,8 +257,8 @@ mod tests {
         let global = make_global("ghostty");
         let mut proj = make_project("myapp", Some("dev"));
         proj.windows = vec![
-            WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: Some("60%".into()), tmux: None },
-            WindowConfig { name: Some("shell".into()), command: None, width: Some("40%".into()), tmux: None },
+            WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: Some("60%".into()), tmux: None, app_id: None },
+            WindowConfig { name: Some("shell".into()), command: None, width: Some("40%".into()), tmux: None, app_id: None },
         ];
         let result = generate_niri_rules(&[proj], &global);
         assert!(result.contains(r##"match app-id=r#"^com\.mitchellh\.ghostty$"# title=r#"^drift:myapp/editor$"#"##));
@@ -272,7 +272,7 @@ mod tests {
         let global = make_global("ghostty");
         let mut proj = make_project("myapp", None);
         proj.windows = vec![
-            WindowConfig { name: Some("editor".into()), command: None, width: Some("800px".into()), tmux: None },
+            WindowConfig { name: Some("editor".into()), command: None, width: Some("800px".into()), tmux: None, app_id: None },
         ];
         let result = generate_niri_rules(&[proj], &global);
         assert!(result.contains("default-column-width { fixed 800; }"));
@@ -283,7 +283,7 @@ mod tests {
         let global = make_global("ghostty");
         let mut proj = make_project("myapp", None);
         proj.windows = vec![
-            WindowConfig { name: Some("shell".into()), command: None, width: None, tmux: None },
+            WindowConfig { name: Some("shell".into()), command: None, width: None, tmux: None, app_id: None },
         ];
         let result = generate_niri_rules(&[proj], &global);
         assert!(!result.contains("default-column-width"));

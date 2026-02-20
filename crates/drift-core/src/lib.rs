@@ -10,4 +10,5 @@ pub mod paths;
 pub mod registry;
 pub mod session;
 pub mod supervisor;
+pub mod sync;
 pub mod workspace;

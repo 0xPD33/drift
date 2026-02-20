@@ -47,9 +47,7 @@ pub fn ensure_claude_trust(repo_path: &Path) -> std::io::Result<()> {
             serde_json::Value::Bool(true),
         );
 
-    let json = serde_json::to_string_pretty(&root).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::Other, e)
-    })?;
+    let json = serde_json::to_string_pretty(&root).map_err(std::io::Error::other)?;
 
     let tmp = claude_json.with_extension("json.tmp");
     fs::write(&tmp, &json)?;

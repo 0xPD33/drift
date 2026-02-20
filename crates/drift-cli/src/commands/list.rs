@@ -22,7 +22,7 @@ pub fn run(archived: bool) -> anyhow::Result<()> {
     let mut grouped: BTreeMap<Option<String>, Vec<(&str, String)>> = BTreeMap::new();
     for p in &projects {
         let folder = p.project.folder.clone();
-        let repo = resolve_repo_path(&p.project.repo);
+        let repo = resolve_repo_path(&p.project.repo)?;
         let repo_display = if let Some(home) = dirs::home_dir() {
             if let Ok(relative) = repo.strip_prefix(&home) {
                 format!("~/{}", relative.display())

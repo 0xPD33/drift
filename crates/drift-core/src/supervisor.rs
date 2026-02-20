@@ -87,7 +87,7 @@ fn install_signal_handlers() {
 pub fn run_supervisor(project_name: &str) -> anyhow::Result<()> {
     let project_config = config::load_project_config(project_name)?;
     let env_vars = env::build_env(&project_config)?;
-    let repo_path = config::resolve_repo_path(&project_config.project.repo);
+    let repo_path = config::resolve_repo_path(&project_config.project.repo)?;
 
     install_signal_handlers();
 

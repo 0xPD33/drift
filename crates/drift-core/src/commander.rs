@@ -131,10 +131,10 @@ impl CooldownTracker {
         let now = Instant::now();
         let mut batches = Vec::new();
         self.entries.retain(|key, entry| {
-            if now >= entry.expires && entry.count > 1 {
-                batches.push((key.0.clone(), key.1.clone(), entry.count));
-                false
-            } else if now >= entry.expires {
+            if now >= entry.expires {
+                if entry.count > 1 {
+                    batches.push((key.0.clone(), key.1.clone(), entry.count));
+                }
                 false
             } else {
                 true

@@ -5,7 +5,7 @@ use crate::config::{self, ProjectConfig};
 pub fn build_env(project: &ProjectConfig) -> anyhow::Result<HashMap<String, String>> {
     let mut env = HashMap::new();
 
-    let repo_path = config::resolve_repo_path(&project.project.repo);
+    let repo_path = config::resolve_repo_path(&project.project.repo)?;
     let repo_str = repo_path.to_string_lossy().to_string();
 
     env.insert("DRIFT_PROJECT".into(), project.project.name.clone());

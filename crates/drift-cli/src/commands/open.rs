@@ -33,7 +33,7 @@ pub fn run(name: &str) -> anyhow::Result<()> {
         check_port_conflicts(name, ports, &mut niri_client);
     }
 
-    let repo_path = config::resolve_repo_path(&project.project.repo);
+    let repo_path = config::resolve_repo_path(&project.project.repo)?;
 
     // Set git identity if configured
     if let Some(git) = &project.git {
@@ -137,8 +137,20 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     } else {
         // Spawn normal windows
         for window in &normal_windows {
-            let cmd = window.command.as_deref().filter(|c| !c.is_empty());
             let wn = window.name.as_deref();
+
+            // app_id-only windows spawn directly (not wrapped in a terminal)
+            if window.app_id.is_some() && window.command.is_none() {
+                let app_id = window.app_id.as_deref().unwrap();
+                let launch_cmd = drift_core::sync::resolve_app_launch_command(app_id);
+                let args: Vec<String> = launch_cmd.split_whitespace().map(String::from).collect();
+                niri_client.spawn(args)?;
+                let label = wn.unwrap_or(app_id);
+                println!("  Spawned app '{label}'");
+                continue;
+            }
+
+            let cmd = window.command.as_deref().filter(|c| !c.is_empty());
             let args = build_terminal_args(terminal, name, wn, &export_str, &repo_str, cmd);
             niri_client.spawn(args)?;
 

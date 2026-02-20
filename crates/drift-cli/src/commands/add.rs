@@ -137,6 +137,7 @@ pub fn run(cmd: AddCommand) -> anyhow::Result<()> {
                 command,
                 width: None,
                 tmux: if tmux { Some(true) } else { None },
+                app_id: None,
             });
             config::save_project_config(&proj, &cfg)?;
             println!("Added window '{name}' to project '{proj}'");
@@ -291,7 +292,7 @@ mod tests {
     #[test]
     fn add_window_duplicate_detection() {
         let mut cfg = minimal_config("test");
-        cfg.windows.push(WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None, tmux: None });
+        cfg.windows.push(WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None, tmux: None, app_id: None });
         let has_dup = cfg.windows.iter().any(|w| w.name.as_deref() == Some("editor"));
         assert!(has_dup);
     }

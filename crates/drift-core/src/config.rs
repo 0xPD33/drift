@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::paths;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct GlobalConfig {
     #[serde(default)]
     pub defaults: Defaults,
@@ -91,16 +91,6 @@ impl Default for EventsConfig {
     }
 }
 
-impl Default for GlobalConfig {
-    fn default() -> Self {
-        Self {
-            defaults: Defaults::default(),
-            ports: PortDefaults::default(),
-            events: EventsConfig::default(),
-            commander: CommanderConfig::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommanderConfig {
@@ -282,6 +272,8 @@ pub struct WindowConfig {
     pub width: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tmux: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -349,15 +341,16 @@ pub fn resolve_current_project(explicit: Option<&str>) -> anyhow::Result<String>
     anyhow::bail!("Could not determine project name. Use --project, set $DRIFT_PROJECT, or run from a drift workspace.")
 }
 
-pub fn resolve_repo_path(raw: &str) -> PathBuf {
+pub fn resolve_repo_path(raw: &str) -> anyhow::Result<PathBuf> {
     if let Some(rest) = raw.strip_prefix("~/") {
-        dirs::home_dir()
-            .expect("could not determine home directory")
-            .join(rest)
+        let home = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("could not determine home directory"))?;
+        Ok(home.join(rest))
     } else if raw == "~" {
-        dirs::home_dir().expect("could not determine home directory")
+        dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("could not determine home directory"))
     } else {
-        PathBuf::from(raw)
+        Ok(PathBuf::from(raw))
     }
 }
 
@@ -518,22 +511,22 @@ range_size = 20
     fn resolve_repo_path_tilde_expansion() {
         let home = dirs::home_dir().unwrap();
 
-        let result = resolve_repo_path("~/code/myapp");
+        let result = resolve_repo_path("~/code/myapp").unwrap();
         assert_eq!(result, home.join("code/myapp"));
 
-        let result = resolve_repo_path("~");
+        let result = resolve_repo_path("~").unwrap();
         assert_eq!(result, home);
     }
 
     #[test]
     fn resolve_repo_path_absolute() {
-        let result = resolve_repo_path("/opt/repos/myapp");
+        let result = resolve_repo_path("/opt/repos/myapp").unwrap();
         assert_eq!(result, PathBuf::from("/opt/repos/myapp"));
     }
 
     #[test]
     fn resolve_repo_path_relative() {
-        let result = resolve_repo_path("repos/myapp");
+        let result = resolve_repo_path("repos/myapp").unwrap();
         assert_eq!(result, PathBuf::from("repos/myapp"));
     }
 
@@ -629,7 +622,7 @@ replay_on_subscribe = 10
                     width: None,
                 }],
             }),
-            windows: vec![WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None, tmux: None }],
+            windows: vec![WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None, tmux: None, app_id: None }],
             tmux: None,
             scratchpad: None,
         };

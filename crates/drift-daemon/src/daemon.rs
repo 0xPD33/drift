@@ -370,14 +370,6 @@ fn spawn_commander() -> Option<u32> {
         }
     }
 
-    let drift_bin = match std::env::current_exe() {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("commander: cannot determine binary path: {e}");
-            return None;
-        }
-    };
-
     let log_path = paths::state_base_dir().join("commander.log");
     let log_file = match fs::OpenOptions::new().create(true).append(true).open(&log_path) {
         Ok(f) => f,
@@ -394,8 +386,7 @@ fn spawn_commander() -> Option<u32> {
         }
     };
 
-    match std::process::Command::new(&drift_bin)
-        .args(["_commander"])
+    match std::process::Command::new("drift-commander")
         .stdout(log_file)
         .stderr(stderr_file)
         .stdin(Stdio::null())

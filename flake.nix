@@ -26,11 +26,19 @@
           inherit cargoArtifacts;
           cargoExtraArgs = "--package drift-cli";
         });
+
+        drift-commander = craneLib.buildPackage (commonArgs // {
+          inherit cargoArtifacts;
+          cargoExtraArgs = "--package drift-commander";
+          buildInputs = [ pkgs.portaudio pkgs.onnxruntime pkgs.alsa-lib ];
+          ORT_LIB_LOCATION = "${pkgs.onnxruntime}/lib";
+          ORT_PREFER_DYNAMIC_LINK = "1";
+        });
       in
       {
         packages = {
           default = drift-cli;
-          inherit drift-cli;
+          inherit drift-cli drift-commander;
         };
 
         devShells.default = craneLib.devShell {
@@ -39,7 +47,15 @@
             cargo
             pkg-config
             rust-analyzer
+            portaudio
+            onnxruntime
+            alsa-lib
+            pipewire
+            openssl
           ];
+          ORT_LIB_LOCATION = "${pkgs.onnxruntime}/lib";
+          ORT_PREFER_DYNAMIC_LINK = "1";
+          ALSA_PLUGIN_DIR = "${pkgs.pipewire}/lib/alsa-lib";
         };
       }))
     // {

@@ -118,12 +118,30 @@ pub struct CommanderConfig {
     pub max_queue: usize,
     #[serde(default)]
     pub event_instructs: HashMap<String, String>,
+    #[serde(default)]
+    pub voice_enabled: bool,
+    #[serde(default = "default_wake_word")]
+    pub wake_word: String,
+    #[serde(default = "default_stt_model")]
+    pub stt_model: String,
+    #[serde(default = "default_vad_threshold")]
+    pub vad_threshold: f32,
+    #[serde(default = "default_max_listen_sec")]
+    pub max_listen_sec: u64,
+    #[serde(default)]
+    pub speak_feedback: bool,
+    #[serde(default)]
+    pub audio_device: Option<String>,
 }
 
 fn default_endpoint() -> String { "http://localhost:8880".into() }
 fn default_voice() -> String { "Vivian".into() }
 fn default_cooldown_sec() -> u64 { 5 }
 fn default_max_queue() -> usize { 3 }
+fn default_wake_word() -> String { "drift".into() }
+fn default_stt_model() -> String { "parakeet-tdt-0.6b-v3".into() }
+fn default_vad_threshold() -> f32 { 0.2 }
+fn default_max_listen_sec() -> u64 { 10 }
 
 impl Default for CommanderConfig {
     fn default() -> Self {
@@ -140,6 +158,13 @@ impl Default for CommanderConfig {
             cooldown_sec: default_cooldown_sec(),
             max_queue: default_max_queue(),
             event_instructs: HashMap::new(),
+            voice_enabled: false,
+            wake_word: default_wake_word(),
+            stt_model: default_stt_model(),
+            vad_threshold: default_vad_threshold(),
+            max_listen_sec: default_max_listen_sec(),
+            speak_feedback: false,
+            audio_device: None,
         }
     }
 }

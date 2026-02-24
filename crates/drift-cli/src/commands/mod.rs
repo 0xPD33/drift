@@ -39,6 +39,14 @@ pub enum CommanderCommand {
     Mute,
     /// Unmute announcements
     Unmute,
+    /// Download voice control models (VAD + STT)
+    Setup,
+    /// Record wake word samples and build model
+    Train {
+        /// Wake word name (default: from config)
+        #[arg(long)]
+        word: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -194,7 +202,4 @@ pub enum Commands {
         /// Project name
         project: String,
     },
-    /// Internal: run commander process (not for direct use)
-    #[command(name = "_commander", hide = true)]
-    RunCommander,
 }

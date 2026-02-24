@@ -1,3 +1,13 @@
+pub mod action;
+pub mod audio;
+pub mod command;
+pub mod models;
+pub mod post_process;
+pub mod stt;
+pub mod vad;
+pub mod voice;
+pub mod wakeword;
+
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
@@ -9,9 +19,9 @@ use std::{fs, io, thread};
 
 use nix::sys::signal::{self, SaFlags, SigAction, SigHandler, SigSet, Signal};
 
-use crate::config::{self, CommanderConfig};
-use crate::events::Event;
-use crate::paths;
+use drift_core::config::{self, CommanderConfig};
+use drift_core::events::Event;
+use drift_core::paths;
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
@@ -159,10 +169,10 @@ enum TtsEngine {
     None,
 }
 
-struct SpeechMessage {
-    text: String,
-    instruct: String,
-    _critical: bool,
+pub(crate) struct SpeechMessage {
+    pub(crate) text: String,
+    pub(crate) instruct: String,
+    pub(crate) _critical: bool,
 }
 
 struct TtsState {
@@ -402,24 +412,28 @@ pub fn run_commander() -> anyhow::Result<()> {
     let interrupt = std::sync::Arc::new(AtomicBool::new(false));
 
     let worker_interrupt = std::sync::Arc::clone(&interrupt);
-    let worker_config = CommanderConfig {
-        enabled: commander_config.enabled,
-        endpoint: commander_config.endpoint.clone(),
-        voice: commander_config.voice.clone(),
-        instruct: commander_config.instruct.clone(),
-        fallback_engine: commander_config.fallback_engine.clone(),
-        fallback_voice: commander_config.fallback_voice.clone(),
-        fallback_command: commander_config.fallback_command.clone(),
-        audio_filter: commander_config.audio_filter.clone(),
-        speak_background_only: commander_config.speak_background_only,
-        cooldown_sec: commander_config.cooldown_sec,
-        max_queue: commander_config.max_queue,
-        event_instructs: commander_config.event_instructs.clone(),
-    };
+    let worker_config = commander_config.clone();
 
     let speech_thread = thread::Builder::new()
         .name("speech-worker".into())
         .spawn(move || speech_worker(speech_rx, &worker_interrupt, worker_config))?;
+
+    // Voice control thread (if enabled)
+    let voice_config = commander_config.clone();
+    let voice_speech_tx = speech_tx.clone();
+    let voice_thread = if voice_config.voice_enabled {
+        Some(
+            thread::Builder::new()
+                .name("voice-control".into())
+                .spawn(move || {
+                    if let Err(e) = voice::run_voice_loop(&voice_config, &SHUTDOWN, Some(voice_speech_tx)) {
+                        eprintln!("commander: voice error: {e}");
+                    }
+                })?,
+        )
+    } else {
+        None
+    };
 
     // Connect to subscribe.sock
     let sock_path = paths::subscribe_socket_path();
@@ -542,6 +556,9 @@ pub fn run_commander() -> anyhow::Result<()> {
     let _ = fs::remove_file(&pid_path);
     drop(speech_tx);
     let _ = speech_thread.join();
+    if let Some(vt) = voice_thread {
+        let _ = vt.join();
+    }
 
     eprintln!("commander shutting down");
     Ok(())

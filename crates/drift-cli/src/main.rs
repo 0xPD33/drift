@@ -50,12 +50,11 @@ fn main() -> anyhow::Result<()> {
             commands::CommanderCommand::Say { text } => commands::commander::say(&text),
             commands::CommanderCommand::Mute => commands::commander::mute(),
             commands::CommanderCommand::Unmute => commands::commander::unmute(),
+            commands::CommanderCommand::Setup => commands::commander::setup(),
+            commands::CommanderCommand::Train { word } => commands::commander::train(word.as_deref()),
         },
         Commands::Supervisor { project } => {
             drift_core::supervisor::run_supervisor(&project)
-        }
-        Commands::RunCommander => {
-            drift_core::commander::run_commander()
         }
     }
 }

@@ -101,6 +101,13 @@ pub fn session_path() -> PathBuf {
     state_base_dir().join("session.json")
 }
 
+pub fn models_dir() -> PathBuf {
+    dirs::cache_dir()
+        .expect("could not determine cache directory")
+        .join("drift")
+        .join("models")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

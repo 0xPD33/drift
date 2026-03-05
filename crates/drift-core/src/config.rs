@@ -179,6 +179,8 @@ impl Default for CommanderConfig {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ProjectConfig {
     pub project: ProjectMeta,
+    #[serde(default = "default_true")]
+    pub auto_close: bool,
     #[serde(default)]
     pub env: EnvConfig,
     #[serde(default)]
@@ -193,6 +195,10 @@ pub struct ProjectConfig {
     pub tmux: Option<TmuxConfig>,
     #[serde(default)]
     pub scratchpad: Option<ScratchpadConfig>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -638,6 +644,7 @@ replay_on_subscribe = 10
                 folder: Some("dev".into()),
                 icon: None,
             },
+            auto_close: true,
             env: EnvConfig::default(),
             git: None,
             ports: None,
@@ -681,6 +688,7 @@ replay_on_subscribe = 10
                 folder: None,
                 icon: None,
             },
+            auto_close: true,
             env: EnvConfig::default(),
             git: None,
             ports: None,
@@ -708,6 +716,7 @@ replay_on_subscribe = 10
                 folder: None,
                 icon: None,
             },
+            auto_close: true,
             env: EnvConfig::default(),
             git: None,
             ports: Some(ProjectPorts {
@@ -744,6 +753,7 @@ replay_on_subscribe = 10
                 folder: None,
                 icon: None,
             },
+            auto_close: true,
             env: EnvConfig::default(),
             git: None,
             ports: None,
@@ -786,6 +796,7 @@ replay_on_subscribe = 10
                 folder: None,
                 icon: None,
             },
+            auto_close: true,
             env: EnvConfig::default(),
             git: None,
             ports: None,

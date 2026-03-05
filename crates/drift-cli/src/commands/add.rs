@@ -211,6 +211,7 @@ mod tests {
                 folder: None,
                 icon: None,
             },
+            auto_close: true,
             env: EnvConfig::default(),
             git: None,
             ports: None,

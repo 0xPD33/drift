@@ -1,80 +1,39 @@
 use std::fs;
-use std::process::{Command, Stdio};
 
 use anyhow::bail;
-use drift_core::{config, niri, paths};
+use drift_core::{niri, paths};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 
 /// Stop supervisor, close windows, unset workspace name, clean up state.
 /// Does NOT emit events or print summary — callers handle that.
 pub fn close_project(project_name: &str) -> anyhow::Result<()> {
-    // Auto-save workspace state before teardown
-    if let Err(e) = drift_core::workspace::save_workspace(project_name) {
-        eprintln!("  Warning: could not save workspace: {e}");
-    }
+    // Read supervisor PID before teardown (teardown removes the PID file)
+    let supervisor_pid = read_supervisor_pid(project_name);
 
-    // Kill tmux session if configured
-    if let Ok(cfg) = config::load_project_config(project_name) {
-        if let Some(tmux_cfg) = cfg.tmux {
-            if tmux_cfg.kill_on_close {
-                let session_name = format!("drift:{project_name}");
-                let has_session = Command::new("tmux")
-                    .args(["has-session", "-t", &session_name])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false);
+    // Non-blocking teardown: save workspace, kill tmux, SIGTERM supervisor,
+    // remove state files, remove from session
+    drift_core::lifecycle::teardown_project(project_name);
 
-                if has_session {
-                    let result = Command::new("tmux")
-                        .args(["kill-session", "-t", &session_name])
-                        .status();
-
-                    if result.map(|s| s.success()).unwrap_or(false) {
-                        println!("  Killed tmux session '{session_name}'");
-                    }
-                }
+    // Wait for supervisor to actually die (blocking)
+    if let Some(pid) = supervisor_pid {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            if signal::kill(Pid::from_raw(pid), None).is_err() {
+                break;
             }
+            std::thread::sleep(std::time::Duration::from_millis(200));
         }
-    }
 
-    let mut niri_client = niri::NiriClient::connect()?;
-
-    // Stop supervisor (which stops all services)
-    let supervisor_pid_path = paths::supervisor_pid_path(project_name);
-    if supervisor_pid_path.exists() {
-        if let Ok(pid_str) = fs::read_to_string(&supervisor_pid_path) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                if signal::kill(Pid::from_raw(pid), None).is_ok() {
-                    let _ = signal::kill(Pid::from_raw(pid), Signal::SIGTERM);
-
-                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-                    while std::time::Instant::now() < deadline {
-                        if signal::kill(Pid::from_raw(pid), None).is_err() {
-                            break;
-                        }
-                        std::thread::sleep(std::time::Duration::from_millis(200));
-                    }
-
-                    if signal::kill(Pid::from_raw(pid), None).is_ok() {
-                        let _ = signal::kill(Pid::from_raw(pid), Signal::SIGKILL);
-                    }
-
-                    println!("  Stopped supervisor (PID {pid})");
-                } else {
-                    println!("  Supervisor already stopped");
-                }
-            }
+        if signal::kill(Pid::from_raw(pid), None).is_ok() {
+            let _ = signal::kill(Pid::from_raw(pid), Signal::SIGKILL);
         }
-        let _ = fs::remove_file(&supervisor_pid_path);
-    }
 
-    // Clean up state file
-    let _ = fs::remove_file(paths::services_state_path(project_name));
+        println!("  Stopped supervisor (PID {pid})");
+    }
 
     // Close all windows on the workspace
+    let mut niri_client = niri::NiriClient::connect()?;
     if let Some(ws) = niri_client.find_workspace_by_name(project_name)? {
         let ws_id = ws.id;
         let windows = niri_client.windows()?;
@@ -91,14 +50,22 @@ pub fn close_project(project_name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn read_supervisor_pid(project_name: &str) -> Option<i32> {
+    let pid_path = paths::supervisor_pid_path(project_name);
+    let pid_str = fs::read_to_string(&pid_path).ok()?;
+    let pid: i32 = pid_str.trim().parse().ok()?;
+    // Check if the process is actually alive
+    if signal::kill(Pid::from_raw(pid), None).is_ok() {
+        Some(pid)
+    } else {
+        None
+    }
+}
+
 pub fn run(name: Option<&str>) -> anyhow::Result<()> {
     let project_name = resolve_project_name(name)?;
 
     close_project(&project_name)?;
-
-    if let Err(e) = drift_core::session::remove_project(&project_name) {
-        eprintln!("  Warning: could not update session: {e}");
-    }
 
     drift_core::events::try_emit_event(&drift_core::events::Event {
         event_type: "drift.project.closed".into(),

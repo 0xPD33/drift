@@ -158,6 +158,7 @@ mod tests {
                 folder: folder.map(String::from),
                 icon: None,
             },
+            auto_close: true,
             env: EnvConfig::default(),
             git: None,
             ports: None,

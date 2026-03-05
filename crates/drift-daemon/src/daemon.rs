@@ -205,7 +205,17 @@ impl DaemonInner {
                 self.windows.insert(window.id, window);
             }
             NiriEvent::WindowClosed { id } => {
+                let ws_id = self.windows.get(&id).and_then(|w| w.workspace_id);
                 self.windows.remove(&id);
+
+                if let Some(ws_id) = ws_id {
+                    if let Some(project) = self.workspace_to_project.get(&ws_id).cloned() {
+                        let has_windows = self.windows.values().any(|w| w.workspace_id == Some(ws_id));
+                        if !has_windows {
+                            self.auto_close_project(&project);
+                        }
+                    }
+                }
             }
             NiriEvent::WindowFocusChanged { id } => {
                 for win in self.windows.values_mut() {
@@ -255,6 +265,32 @@ impl DaemonInner {
         self.active_project = self.focused_workspace_id
             .and_then(|id| self.workspace_to_project.get(&id))
             .cloned();
+    }
+
+    fn auto_close_project(&mut self, project_name: &str) {
+        if let Ok(cfg) = drift_core::config::load_project_config(project_name) {
+            if !cfg.auto_close {
+                return;
+            }
+        }
+
+        drift_core::lifecycle::teardown_project(project_name);
+
+        if let Ok(mut client) = drift_core::niri::NiriClient::connect() {
+            let _ = client.unset_workspace_name(project_name);
+        }
+
+        self.process_event(Event {
+            event_type: "drift.project.closed".into(),
+            project: project_name.to_string(),
+            source: "daemon".into(),
+            ts: events::iso_now(),
+            level: Some("info".into()),
+            title: Some(format!("Auto-closed project '{project_name}'")),
+            body: None,
+            meta: None,
+            priority: None,
+        });
     }
 
     fn classify_priority(&self, event: &Event) -> &'static str {

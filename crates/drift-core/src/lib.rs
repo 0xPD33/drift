@@ -4,6 +4,7 @@ pub mod config;
 pub mod env;
 pub mod events;
 pub mod kdl;
+pub mod lifecycle;
 pub mod niri;
 pub mod paths;
 pub mod registry;

@@ -42,6 +42,7 @@ pub fn run(name: &str, repo: Option<&str>, folder: Option<&str>, template: Optio
                 folder: folder.map(|f| f.to_string()),
                 icon: None,
             },
+            auto_close: true,
             env: EnvConfig::default(),
             git: None,
             ports: None,

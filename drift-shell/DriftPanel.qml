@@ -318,13 +318,6 @@ PanelWindow {
         command: ["drift", "to", ""]
     }
 
-    // Enter animation
-    opacity: 0
-    states: State {
-        when: panel.showing
-        PropertyChanges { target: panel; opacity: 1 }
-    }
-    transitions: Transition {
-        NumberAnimation { property: "opacity"; duration: 180; easing.type: Easing.OutCubic }
-    }
+    opacity: showing ? 1 : 0
+    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 }

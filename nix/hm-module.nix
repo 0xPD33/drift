@@ -13,7 +13,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = self.packages.${pkgs.system}.default;
-      description = "The drift package to use.";
+      description = "The drift CLI package.";
     };
 
     shell.enable = lib.mkOption {
@@ -26,6 +26,91 @@ in
       type = lib.types.bool;
       default = true;
       description = "Run the drift daemon as a systemd user service.";
+    };
+
+    commander = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Run the drift commander (TTS announcements + voice control).";
+      };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = self.packages.${pkgs.system}.drift-commander;
+        description = "The drift-commander package.";
+      };
+    };
+
+    llm = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Run a local llama-cpp server for voice command interpretation.";
+      };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.llama-cpp;
+        description = "The llama-cpp package providing llama-server.";
+      };
+
+      model = lib.mkOption {
+        type = lib.types.str;
+        description = "Path to the GGUF model file.";
+      };
+
+      port = lib.mkOption {
+        type = lib.types.port;
+        default = 8080;
+        description = "Port for the llama-cpp server.";
+      };
+
+      contextSize = lib.mkOption {
+        type = lib.types.int;
+        default = 2048;
+        description = "Context size for the model.";
+      };
+
+      gpuLayers = lib.mkOption {
+        type = lib.types.int;
+        default = 99;
+        description = "Number of layers to offload to GPU (-1 for all).";
+      };
+
+      extraArgs = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Extra arguments passed to llama-server.";
+      };
+    };
+
+    tts = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Run a TTS HTTP server for speech synthesis.";
+      };
+
+      command = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          The command to start the TTS server.
+          It should listen on the port specified by programs.drift.tts.port.
+        '';
+      };
+
+      port = lib.mkOption {
+        type = lib.types.port;
+        default = 8880;
+        description = "Port the TTS server listens on.";
+      };
+
+      environment = lib.mkOption {
+        type = lib.types.attrsOf lib.types.str;
+        default = {};
+        description = "Extra environment variables for the TTS service.";
+      };
     };
   };
 
@@ -41,7 +126,8 @@ in
       "quickshell/DriftToastManager.qml".source = "${qmlDir}/DriftToastManager.qml";
     };
 
-    # Systemd user service for the daemon
+    # --- Systemd user services ---
+
     systemd.user.services.drift-daemon = lib.mkIf cfg.daemon.enable {
       Unit = {
         Description = "Drift workspace daemon";
@@ -51,6 +137,67 @@ in
         ExecStart = "${cfg.package}/bin/drift daemon";
         Restart = "on-failure";
         RestartSec = 3;
+      };
+      Install = {
+        WantedBy = [ "graphical-session.target" ];
+      };
+    };
+
+    systemd.user.services.drift-llm = lib.mkIf cfg.llm.enable {
+      Unit = {
+        Description = "Drift LLM server (llama-cpp)";
+        After = [ "network.target" ];
+      };
+      Service = {
+        ExecStart = lib.concatStringsSep " " ([
+          "${cfg.llm.package}/bin/llama-server"
+          "--model" cfg.llm.model
+          "--port" (toString cfg.llm.port)
+          "--ctx-size" (toString cfg.llm.contextSize)
+          "--n-gpu-layers" (toString cfg.llm.gpuLayers)
+        ] ++ cfg.llm.extraArgs);
+        Restart = "on-failure";
+        RestartSec = 5;
+      };
+      Install = {
+        WantedBy = [ "default.target" ];
+      };
+    };
+
+    systemd.user.services.drift-tts = lib.mkIf cfg.tts.enable {
+      Unit = {
+        Description = "Drift TTS server";
+        After = [ "network.target" ];
+      };
+      Service = {
+        ExecStart = cfg.tts.command;
+        Restart = "on-failure";
+        RestartSec = 5;
+        Environment = lib.mapAttrsToList (k: v: "${k}=${v}") cfg.tts.environment;
+      };
+      Install = {
+        WantedBy = [ "default.target" ];
+      };
+    };
+
+    systemd.user.services.drift-commander = lib.mkIf cfg.commander.enable {
+      Unit = {
+        Description = "Drift commander (TTS announcements + voice control)";
+        After = [ "drift-daemon.service" ]
+          ++ lib.optional cfg.llm.enable "drift-llm.service"
+          ++ lib.optional cfg.tts.enable "drift-tts.service";
+        Requires = [ "drift-daemon.service" ];
+        Wants = lib.optional cfg.llm.enable "drift-llm.service"
+          ++ lib.optional cfg.tts.enable "drift-tts.service";
+      };
+      Service = {
+        ExecStart = "${cfg.commander.package}/bin/drift-commander";
+        Restart = "on-failure";
+        RestartSec = 3;
+        Environment = [
+          "ALSA_PLUGIN_DIR=${pkgs.pipewire}/lib/alsa-lib"
+          "ORT_DYLIB_PATH=${pkgs.onnxruntime}/lib/libonnxruntime.so"
+        ];
       };
       Install = {
         WantedBy = [ "graphical-session.target" ];

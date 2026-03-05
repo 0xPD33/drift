@@ -318,6 +318,4 @@ PanelWindow {
         command: ["drift", "to", ""]
     }
 
-    opacity: showing ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 }

@@ -75,6 +75,8 @@ impl SttEngine {
 
         // 1. Mel spectrogram -> [1, 128, T]
         let mel_features = self.mel.compute(samples);
+        let mel_shape = mel_features.shape().to_vec();
+        eprintln!("commander: STT mel shape: {:?}", mel_shape);
 
         // 2. Encoder
         let num_frames = mel_features.shape()[2] as i64;
@@ -100,6 +102,11 @@ impl SttEngine {
             .map(|a| a.to_owned())?;
 
         let encoded_length = enc_len.iter().next().copied().unwrap_or(0) as usize;
+        eprintln!(
+            "commander: STT encoder out shape: {:?}, encoded_length: {}",
+            encoder_out.shape(),
+            encoded_length
+        );
 
         // 3. TDT greedy decode
         let token_ids = greedy_decode_tdt(
@@ -111,6 +118,8 @@ impl SttEngine {
             self.tokenizer.blank_id(),
             10000,
         )?;
+
+        eprintln!("commander: STT decoded {} tokens: {:?}", token_ids.len(), &token_ids);
 
         // 4. Decode tokens
         Ok(self.tokenizer.decode(&token_ids))

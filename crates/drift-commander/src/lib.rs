@@ -1,6 +1,7 @@
 pub mod action;
 pub mod audio;
 pub mod command;
+pub mod command_llm;
 pub mod models;
 pub mod post_process;
 pub mod stt;
@@ -236,7 +237,7 @@ impl TtsState {
     }
 }
 
-fn make_agent(timeout_secs: u64) -> ureq::Agent {
+pub(crate) fn make_agent(timeout_secs: u64) -> ureq::Agent {
     ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(timeout_secs)))
         .build()
@@ -438,6 +439,7 @@ pub fn run_commander() -> anyhow::Result<()> {
     // Connect to subscribe.sock
     let sock_path = paths::subscribe_socket_path();
     let mut cooldown = CooldownTracker::new(commander_config.cooldown_sec);
+    let mut logged_connect_err = false;
 
     'outer: loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
@@ -445,9 +447,15 @@ pub fn run_commander() -> anyhow::Result<()> {
         }
 
         let stream = match UnixStream::connect(&sock_path) {
-            Ok(s) => s,
+            Ok(s) => {
+                logged_connect_err = false;
+                s
+            }
             Err(e) => {
-                eprintln!("commander: cannot connect to subscribe.sock: {e}");
+                if !logged_connect_err {
+                    eprintln!("commander: cannot connect to subscribe.sock: {e}");
+                    logged_connect_err = true;
+                }
                 thread::sleep(Duration::from_secs(2));
                 continue;
             }

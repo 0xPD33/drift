@@ -1,4 +1,5 @@
 use std::fs;
+use std::process::{Command, Stdio};
 
 use crate::command::VoiceCommand;
 use drift_core::events::{self, Event};
@@ -13,15 +14,96 @@ pub struct ActionResult {
 
 pub fn execute(command: &VoiceCommand) -> ActionResult {
     match command {
+        // Project lifecycle
         VoiceCommand::SwitchToProject(name) => switch_to_project(name),
+        VoiceCommand::OpenProject(name) => run_drift(&["open", name], &format!("opened {name}")),
         VoiceCommand::CloseProject(name) => close_project(name.as_deref()),
+        VoiceCommand::InitProject(name) => run_drift(&["init", name], &format!("initialized {name}")),
+        VoiceCommand::ArchiveProject(name) => {
+            run_drift(&["archive", name], &format!("archived {name}"))
+        }
+        VoiceCommand::UnarchiveProject(name) => {
+            run_drift(&["unarchive", name], &format!("unarchived {name}"))
+        }
+        VoiceCommand::DeleteProject(name) => {
+            run_drift(&["delete", "--yes", name], &format!("deleted {name}"))
+        }
+        VoiceCommand::SaveWorkspace => run_drift(&["save"], "workspace saved"),
+        VoiceCommand::RestoreWorkspaces => run_drift(&["restore"], "workspaces restored"),
+        // Info / monitoring
         VoiceCommand::Status => status(),
         VoiceCommand::ListProjects => list_projects(),
+        VoiceCommand::ShowLogs(service) => {
+            let args: Vec<&str> = match service {
+                Some(s) => vec!["logs", s],
+                None => vec!["logs"],
+            };
+            run_drift(&args, "showing logs")
+        }
+        VoiceCommand::ShowEvents => run_drift(&["events", "--last", "10"], "showing recent events"),
+        VoiceCommand::ShowPorts => run_drift(&["ports"], "showing ports"),
+        // Configuration
+        VoiceCommand::AddWindow(name) => {
+            run_drift(&["add", "window", name], &format!("added window {name}"))
+        }
+        VoiceCommand::AddService { name, command } => run_drift(
+            &["add", "service", name, command],
+            &format!("added service {name}"),
+        ),
+        VoiceCommand::AddAgent { name, agent, prompt } => run_drift(
+            &["add", "agent", name, agent, prompt],
+            &format!("added agent {name}"),
+        ),
+        VoiceCommand::RemoveWindow(name) => {
+            run_drift(&["remove", "window", name], &format!("removed window {name}"))
+        }
+        VoiceCommand::RemoveService(name) => {
+            run_drift(&["remove", "service", name], &format!("removed service {name}"))
+        }
+        VoiceCommand::RemoveAgent(name) => {
+            run_drift(&["remove", "agent", name], &format!("removed agent {name}"))
+        }
+        // Notifications
+        VoiceCommand::Notify(msg) => run_drift(&["notify", msg], "notification sent"),
+        // Voice control
         VoiceCommand::Mute => mute(),
         VoiceCommand::Unmute => unmute(),
         VoiceCommand::Unknown(text) => ActionResult {
             success: false,
             message: format!("I didn't understand: {text}"),
+        },
+    }
+}
+
+fn run_drift(args: &[&str], success_msg: &str) -> ActionResult {
+    let drift_bin = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            return ActionResult {
+                success: false,
+                message: format!("cannot determine drift binary path: {e}"),
+            }
+        }
+    };
+
+    match Command::new(&drift_bin)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .status()
+    {
+        Ok(s) if s.success() => ActionResult {
+            success: true,
+            message: success_msg.to_string(),
+        },
+        Ok(s) => ActionResult {
+            success: false,
+            message: format!("drift {} exited with {s}", args.join(" ")),
+        },
+        Err(e) => ActionResult {
+            success: false,
+            message: format!("failed to run drift {}: {e}", args.join(" ")),
         },
     }
 }

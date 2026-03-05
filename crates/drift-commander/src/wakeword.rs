@@ -20,6 +20,11 @@ impl WakeWordDetector {
                 channels: 1,
                 ..Default::default()
             },
+            detector: rustpotter::DetectorConfig {
+                min_scores: 1,
+                eager: true,
+                ..Default::default()
+            },
             ..Default::default()
         };
 

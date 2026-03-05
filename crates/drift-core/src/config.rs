@@ -132,6 +132,10 @@ pub struct CommanderConfig {
     pub speak_feedback: bool,
     #[serde(default)]
     pub audio_device: Option<String>,
+    #[serde(default = "default_llm_endpoint")]
+    pub llm_endpoint: String,
+    #[serde(default)]
+    pub llm_model: Option<String>,
 }
 
 fn default_endpoint() -> String { "http://localhost:8880".into() }
@@ -142,6 +146,7 @@ fn default_wake_word() -> String { "drift".into() }
 fn default_stt_model() -> String { "parakeet-tdt-0.6b-v3".into() }
 fn default_vad_threshold() -> f32 { 0.2 }
 fn default_max_listen_sec() -> u64 { 10 }
+fn default_llm_endpoint() -> String { "http://localhost:8080".into() }
 
 impl Default for CommanderConfig {
     fn default() -> Self {
@@ -165,6 +170,8 @@ impl Default for CommanderConfig {
             max_listen_sec: default_max_listen_sec(),
             speak_feedback: false,
             audio_device: None,
+            llm_endpoint: default_llm_endpoint(),
+            llm_model: None,
         }
     }
 }

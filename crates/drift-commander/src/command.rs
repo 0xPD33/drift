@@ -2,10 +2,32 @@ use drift_core::registry;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VoiceCommand {
+    // Project lifecycle
     SwitchToProject(String),
+    OpenProject(String),
     CloseProject(Option<String>),
+    InitProject(String),
+    ArchiveProject(String),
+    UnarchiveProject(String),
+    DeleteProject(String),
+    SaveWorkspace,
+    RestoreWorkspaces,
+    // Info / monitoring
     Status,
     ListProjects,
+    ShowLogs(Option<String>),
+    ShowEvents,
+    ShowPorts,
+    // Configuration
+    AddWindow(String),
+    AddService { name: String, command: String },
+    AddAgent { name: String, agent: String, prompt: String },
+    RemoveWindow(String),
+    RemoveService(String),
+    RemoveAgent(String),
+    // Notifications
+    Notify(String),
+    // Voice control
     Mute,
     Unmute,
     Unknown(String),
@@ -13,7 +35,9 @@ pub enum VoiceCommand {
 
 pub fn parse_command(transcript: &str) -> VoiceCommand {
     let normalized = transcript.trim().to_lowercase();
-    let normalized = normalize_whitespace(&normalized);
+    // Strip trailing punctuation that STT often adds
+    let normalized = normalized.trim_end_matches(|c: char| c.is_ascii_punctuation());
+    let normalized = normalize_whitespace(normalized);
 
     if normalized.is_empty() {
         return VoiceCommand::Unknown(transcript.to_string());
@@ -234,6 +258,13 @@ mod tests {
         );
         assert_eq!(parse_command("STATUS"), VoiceCommand::Status);
         assert_eq!(parse_command("MUTE"), VoiceCommand::Mute);
+    }
+
+    #[test]
+    fn parse_strips_punctuation() {
+        assert_eq!(parse_command("Status."), VoiceCommand::Status);
+        assert_eq!(parse_command("mute!"), VoiceCommand::Mute);
+        assert_eq!(parse_command("list projects."), VoiceCommand::ListProjects);
     }
 
     #[test]

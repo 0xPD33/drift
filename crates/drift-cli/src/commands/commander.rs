@@ -157,7 +157,7 @@ pub fn setup() -> anyhow::Result<()> {
         println!("[ok] Parakeet STT model ({})", config.commander.stt_model);
     } else {
         println!("[missing] Parakeet STT model ({})", config.commander.stt_model);
-        println!("  Download: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2");
+        println!("  Download from HuggingFace: https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tree/main");
         println!("  Extract to: {}", stt_dir.display());
         all_ready = false;
     }

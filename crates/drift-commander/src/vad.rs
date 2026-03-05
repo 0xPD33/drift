@@ -138,6 +138,24 @@ impl SileroVad {
         self.samples_since_trim = 0;
     }
 
+    /// Reset segment tracking but preserve the LSTM state and smoothed probability.
+    /// This keeps the model "warm" for immediate speech detection while clearing
+    /// accumulated segments and audio history.
+    pub fn warm_reset(&mut self) {
+        // Keep: self.state (LSTM h/c), self.smoothed_prob, self.session
+        self.buffer.clear();
+        self.speeches.clear();
+        self.current_state = VadState::Silence;
+        self.frames_in_state = 0;
+        self.silence_frames = 0;
+        self.current_time = 0.0;
+        self.time_offset = 0.0;
+        self.speech_start_time = None;
+        self.sample_buffer.clear();
+        self.frame_counter = 0;
+        self.samples_since_trim = 0;
+    }
+
     fn calc_speech_prob(&mut self, audio_frame: &[f32]) -> Result<f32, ort::Error> {
         let frame_len = audio_frame.len().min(512);
 
@@ -384,21 +402,6 @@ impl SileroVad {
 
             let drain = hop.min(self.buffer.len());
             self.buffer.drain(0..drain);
-        }
-
-        let partial_threshold = frame_size / 8;
-        if !self.buffer.is_empty() && self.buffer.len() >= partial_threshold {
-            frame.clear();
-            frame.resize(frame_size, 0.0);
-
-            let remaining = self.buffer.len();
-            {
-                let contiguous = self.buffer.make_contiguous();
-                frame[0..remaining].copy_from_slice(&contiguous[0..remaining]);
-            }
-
-            self.process_frame(&frame, remaining)?;
-            self.buffer.clear();
         }
 
         if self.samples_since_trim >= self.trim_threshold {

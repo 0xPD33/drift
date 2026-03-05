@@ -1,0 +1,6 @@
+module drift
+DriftState 1.0 DriftState.qml
+DriftStatus 1.0 DriftStatus.qml
+DriftPanel 1.0 DriftPanel.qml
+DriftToast 1.0 DriftToast.qml
+DriftToastManager 1.0 DriftToastManager.qml

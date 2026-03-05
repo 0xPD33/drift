@@ -169,6 +169,7 @@ in
 
     # Deploy QML files into ~/.config/quickshell/drift/
     xdg.configFile = lib.mkIf cfg.shell.enable {
+      "quickshell/drift/qmldir".source = "${qmlDir}/qmldir";
       "quickshell/drift/DriftState.qml".source = "${qmlDir}/DriftState.qml";
       "quickshell/drift/DriftStatus.qml".source = "${qmlDir}/DriftStatus.qml";
       "quickshell/drift/DriftPanel.qml".source = "${qmlDir}/DriftPanel.qml";

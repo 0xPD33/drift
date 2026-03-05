@@ -29,25 +29,31 @@ in
 
            import "drift" as Drift
 
-        1. Instantiate the state object in your ShellRoot:
+        1. Instantiate the state object in your ShellRoot. IMPORTANT: use
+           "property var" to avoid a binding loop where the Bar's driftState
+           property resolves to itself:
 
-           Drift.DriftState { id: driftState }
+           property var driftState: Drift.DriftState {}
+
+           Then pass it to child components as root.driftState.
 
         2. Add toast notifications (standalone overlay panel):
 
            Drift.DriftToastManager {
-               driftState: driftState
+               driftState: root.driftState
                bgColor: root.bgColor
                bgSecondary: root.bgSecondary
                textColor: root.textColor
                textDim: root.textDim
            }
 
-        3. Add the side panel (toggle with driftPanel.toggle()):
+        3. Add the side panel (toggle with driftPanel.toggle()).
+           DriftPanel is a QtObject containing both a backdrop (click-outside-
+           to-dismiss) and the panel window:
 
            Drift.DriftPanel {
                id: driftPanel
-               driftState: driftState
+               driftState: root.driftState
                bgColor: root.bgColor
                bgSecondary: root.bgSecondary
                textColor: root.textColor
@@ -55,10 +61,12 @@ in
                accentColor: root.accentColor
            }
 
-        4. Optionally add Drift.DriftStatus to your bar (also import "drift" as Drift in Bar.qml):
+        4. Add Drift.DriftStatus to your bar (also import "drift" as Drift
+           in Bar.qml). Place it BEFORE workspace indicators in the RowLayout
+           so it appears on the left:
 
            Drift.DriftStatus {
-               driftState: driftState
+               driftState: bar.driftState
                bgColor: bar.bgColor
                bgSecondary: bar.bgSecondary
                textColor: bar.textColor

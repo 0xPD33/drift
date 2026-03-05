@@ -33,8 +33,22 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 6
 
+        Rectangle {
+            width: 8
+            height: 8
+            radius: 4
+            anchors.verticalCenter: parent.verticalCenter
+            color: {
+                if (!driftStatus.driftState) return driftStatus.textDim;
+                if (!driftStatus.driftState.daemonRunning) return "#d26a6a";
+                if (driftStatus.driftState.activeProject) return "#a0d0a0";
+                return driftStatus.textDim;
+            }
+        }
+
         Text {
             text: {
+                if (!driftStatus.driftState) return "drift";
                 if (!driftStatus.driftState.daemonRunning) return "\uf071"; // warning icon
                 var proj = driftStatus.driftState.activeProject;
                 if (!proj) return "drift";
@@ -70,6 +84,7 @@ Rectangle {
             Repeater {
                 id: dotRepeater
                 model: {
+                    if (!driftStatus.driftState) return [];
                     if (!driftStatus.driftState.daemonRunning) return [];
                     var proj = driftStatus.driftState.activeProject;
                     if (!proj) return [];

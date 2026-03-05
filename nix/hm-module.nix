@@ -19,7 +19,57 @@ in
     shell.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "Deploy QuickShell QML components.";
+      description = ''
+        Deploy drift QML components to ~/.config/quickshell/drift/.
+
+        These components must be manually imported into your shell.qml.
+        Add the following to integrate drift into your QuickShell setup:
+
+        First, add the import at the top of your shell.qml:
+
+           import "drift" as Drift
+
+        1. Instantiate the state object in your ShellRoot:
+
+           Drift.DriftState { id: driftState }
+
+        2. Add toast notifications (standalone overlay panel):
+
+           Drift.DriftToastManager {
+               driftState: driftState
+               bgColor: root.bgColor
+               bgSecondary: root.bgSecondary
+               textColor: root.textColor
+               textDim: root.textDim
+           }
+
+        3. Add the side panel (toggle with driftPanel.toggle()):
+
+           Drift.DriftPanel {
+               id: driftPanel
+               driftState: driftState
+               bgColor: root.bgColor
+               bgSecondary: root.bgSecondary
+               textColor: root.textColor
+               textDim: root.textDim
+               accentColor: root.accentColor
+           }
+
+        4. Optionally add Drift.DriftStatus to your bar (also import "drift" as Drift in Bar.qml):
+
+           Drift.DriftStatus {
+               driftState: driftState
+               bgColor: bar.bgColor
+               bgSecondary: bar.bgSecondary
+               textColor: bar.textColor
+               textDim: bar.textDim
+               accentColor: bar.accentColor
+               onClicked: driftPanel.toggle()
+           }
+
+        All components accept standard theme colors (bgColor, bgSecondary,
+        textColor, textDim, accentColor) so they match your existing shell.
+      '';
     };
 
     daemon.enable = lib.mkOption {
@@ -117,13 +167,13 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
 
-    # Deploy QML files into ~/.config/quickshell/
+    # Deploy QML files into ~/.config/quickshell/drift/
     xdg.configFile = lib.mkIf cfg.shell.enable {
-      "quickshell/DriftState.qml".source = "${qmlDir}/DriftState.qml";
-      "quickshell/DriftStatus.qml".source = "${qmlDir}/DriftStatus.qml";
-      "quickshell/DriftPanel.qml".source = "${qmlDir}/DriftPanel.qml";
-      "quickshell/DriftToast.qml".source = "${qmlDir}/DriftToast.qml";
-      "quickshell/DriftToastManager.qml".source = "${qmlDir}/DriftToastManager.qml";
+      "quickshell/drift/DriftState.qml".source = "${qmlDir}/DriftState.qml";
+      "quickshell/drift/DriftStatus.qml".source = "${qmlDir}/DriftStatus.qml";
+      "quickshell/drift/DriftPanel.qml".source = "${qmlDir}/DriftPanel.qml";
+      "quickshell/drift/DriftToast.qml".source = "${qmlDir}/DriftToast.qml";
+      "quickshell/drift/DriftToastManager.qml".source = "${qmlDir}/DriftToastManager.qml";
     };
 
     # --- Systemd user services ---

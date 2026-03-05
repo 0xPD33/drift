@@ -16,7 +16,7 @@
         commonArgs = {
           src = craneLib.cleanCargoSource ./.;
           strictDeps = true;
-          buildInputs = [ ];
+          buildInputs = [ pkgs.openssl ];
           nativeBuildInputs = [ pkgs.pkg-config ];
         };
 

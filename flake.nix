@@ -16,8 +16,10 @@
         commonArgs = {
           src = craneLib.cleanCargoSource ./.;
           strictDeps = true;
-          buildInputs = [ pkgs.openssl ];
+          buildInputs = [ pkgs.openssl pkgs.portaudio pkgs.onnxruntime pkgs.alsa-lib ];
           nativeBuildInputs = [ pkgs.pkg-config ];
+          ORT_LIB_LOCATION = "${pkgs.onnxruntime}/lib";
+          ORT_PREFER_DYNAMIC_LINK = "1";
         };
 
         cargoArtifacts = craneLib.buildDepsOnly commonArgs;
@@ -30,9 +32,6 @@
         drift-commander = craneLib.buildPackage (commonArgs // {
           inherit cargoArtifacts;
           cargoExtraArgs = "--package drift-commander";
-          buildInputs = [ pkgs.portaudio pkgs.onnxruntime pkgs.alsa-lib ];
-          ORT_LIB_LOCATION = "${pkgs.onnxruntime}/lib";
-          ORT_PREFER_DYNAMIC_LINK = "1";
         });
       in
       {

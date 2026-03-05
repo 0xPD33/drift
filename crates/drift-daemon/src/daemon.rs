@@ -14,7 +14,7 @@ use drift_core::events::{self, Event};
 use drift_core::paths;
 use crate::state::{DaemonState, WorkspaceProject};
 
-const STATE_WRITE_INTERVAL: Duration = Duration::from_secs(5);
+const STATE_WRITE_INTERVAL: Duration = Duration::from_secs(1);
 
 pub enum DaemonMsg {
     NiriEvent(NiriEvent),

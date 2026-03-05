@@ -14,9 +14,9 @@ QtObject {
     // --- Signals ---
     signal eventReceived(var event)
 
-    // --- Polling: drift shell-data every 2s ---
+    // --- Polling: drift shell-data every 1s ---
     property var pollTimer: Timer {
-        interval: 2000
+        interval: 1000
         running: true
         repeat: true
         triggeredOnStart: true

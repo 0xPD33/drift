@@ -182,6 +182,8 @@ pub struct ProjectConfig {
     #[serde(default = "default_true")]
     pub auto_close: bool,
     #[serde(default)]
+    pub persist_windows: bool,
+    #[serde(default)]
     pub env: EnvConfig,
     #[serde(default)]
     pub git: Option<GitConfig>,
@@ -645,6 +647,7 @@ replay_on_subscribe = 10
                 icon: None,
             },
             auto_close: true,
+            persist_windows: false,
             env: EnvConfig::default(),
             git: None,
             ports: None,
@@ -689,6 +692,7 @@ replay_on_subscribe = 10
                 icon: None,
             },
             auto_close: true,
+            persist_windows: false,
             env: EnvConfig::default(),
             git: None,
             ports: None,
@@ -717,6 +721,7 @@ replay_on_subscribe = 10
                 icon: None,
             },
             auto_close: true,
+            persist_windows: false,
             env: EnvConfig::default(),
             git: None,
             ports: Some(ProjectPorts {
@@ -754,6 +759,7 @@ replay_on_subscribe = 10
                 icon: None,
             },
             auto_close: true,
+            persist_windows: false,
             env: EnvConfig::default(),
             git: None,
             ports: None,
@@ -797,6 +803,7 @@ replay_on_subscribe = 10
                 icon: None,
             },
             auto_close: true,
+            persist_windows: false,
             env: EnvConfig::default(),
             git: None,
             ports: None,

@@ -43,6 +43,7 @@ pub fn run(name: &str, repo: Option<&str>, folder: Option<&str>, template: Optio
                 icon: None,
             },
             auto_close: true,
+            persist_windows: false,
             env: EnvConfig::default(),
             git: None,
             ports: None,

@@ -16,6 +16,15 @@ pub struct WorkspaceSnapshot {
 pub struct SavedWindow {
     pub app_id: Option<String>,
     pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_name: Option<String>,
+}
+
+/// Extract window config name from drift title pattern "drift:project/name"
+pub fn extract_config_name(title: Option<&str>, project: &str) -> Option<String> {
+    let title = title?;
+    let prefix = format!("drift:{project}/");
+    title.strip_prefix(&prefix).map(|s| s.to_string())
 }
 
 pub fn save_workspace(project: &str) -> anyhow::Result<()> {
@@ -33,6 +42,7 @@ pub fn save_workspace(project: &str) -> anyhow::Result<()> {
         .map(|w| SavedWindow {
             app_id: w.app_id.clone(),
             title: w.title.clone(),
+            config_name: extract_config_name(w.title.as_deref(), project),
         })
         .collect();
 
@@ -85,10 +95,12 @@ mod tests {
                 SavedWindow {
                     app_id: Some("org.mozilla.firefox".into()),
                     title: Some("Home - Firefox".into()),
+                    config_name: None,
                 },
                 SavedWindow {
                     app_id: Some("com.mitchellh.ghostty".into()),
                     title: Some("~/code/myapp".into()),
+                    config_name: None,
                 },
             ],
         };
@@ -106,6 +118,7 @@ mod tests {
         let window = SavedWindow {
             app_id: None,
             title: None,
+            config_name: None,
         };
         let json = serde_json::to_string(&window).unwrap();
         let parsed: SavedWindow = serde_json::from_str(&json).unwrap();
@@ -118,6 +131,7 @@ mod tests {
         let window = SavedWindow {
             app_id: Some("kitty".into()),
             title: Some("terminal".into()),
+            config_name: None,
         };
         let json = serde_json::to_string(&window).unwrap();
         let parsed: SavedWindow = serde_json::from_str(&json).unwrap();
@@ -140,6 +154,7 @@ mod tests {
                 SavedWindow {
                     app_id: Some("app1".into()),
                     title: Some("Win 1".into()),
+                    config_name: None,
                 },
             ],
         };
@@ -149,5 +164,13 @@ mod tests {
         assert_eq!(parsed.saved_at, "9999999");
         assert_eq!(parsed.windows.len(), 1);
         assert_eq!(parsed.windows[0].app_id.as_deref(), Some("app1"));
+    }
+
+    #[test]
+    fn extract_config_name_from_title() {
+        assert_eq!(extract_config_name(Some("drift:myapp/editor"), "myapp"), Some("editor".into()));
+        assert_eq!(extract_config_name(Some("drift:myapp"), "myapp"), None);
+        assert_eq!(extract_config_name(Some("random title"), "myapp"), None);
+        assert_eq!(extract_config_name(None, "myapp"), None);
     }
 }

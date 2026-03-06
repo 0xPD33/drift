@@ -135,6 +135,7 @@ mod tests {
                 icon: None,
             },
             auto_close: true,
+            persist_windows: false,
             env: EnvConfig::default(),
             git: None,
             ports: None,

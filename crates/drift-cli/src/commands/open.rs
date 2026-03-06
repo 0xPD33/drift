@@ -3,7 +3,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use anyhow::Context;
-use drift_core::{config, env, kdl, niri, paths, registry};
+use drift_core::{config, env, kdl, niri, paths, registry, workspace};
 
 pub fn run(name: &str) -> anyhow::Result<()> {
     let project = config::load_project_config(name)?;
@@ -121,10 +121,25 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     let export_str = env::format_env_exports(&env_vars);
     let repo_str = repo_path.to_string_lossy();
 
+    // Determine which windows to spawn (persist_windows uses snapshot state)
+    let snapshot_apps = if project.persist_windows {
+        load_persisted_state(name)
+    } else {
+        None
+    };
+
+    let windows_to_spawn: Vec<&config::WindowConfig> = match &snapshot_apps {
+        Some((config_names, _)) => {
+            project.windows.iter()
+                .filter(|w| w.name.as_ref().is_some_and(|n| config_names.contains(n.as_str())))
+                .collect()
+        }
+        None => project.windows.iter().collect(),
+    };
+
     // Partition windows into tmux and normal
-    let (tmux_windows, normal_windows): (Vec<_>, Vec<_>) = project
-        .windows
-        .iter()
+    let (tmux_windows, normal_windows): (Vec<_>, Vec<_>) = windows_to_spawn
+        .into_iter()
         .partition(|w| w.tmux == Some(true));
 
     // Collect (title, width) pairs for windows that need sizing after spawn
@@ -177,6 +192,16 @@ pub fn run(name: &str) -> anyhow::Result<()> {
                 &tmux_windows,
                 &mut niri_client,
             )?;
+        }
+    }
+
+    // Restore non-config apps from snapshot (user-opened GUI apps)
+    if let Some((_, ref non_config_apps)) = snapshot_apps {
+        for app_id in non_config_apps {
+            let launch_cmd = drift_core::sync::resolve_app_launch_command(app_id);
+            let args: Vec<String> = launch_cmd.split_whitespace().map(String::from).collect();
+            niri_client.spawn(args)?;
+            println!("  Restored app '{app_id}'");
         }
     }
 
@@ -450,5 +475,31 @@ fn collect_ports(ports: &drift_core::config::ProjectPorts) -> std::collections::
         set.insert(*port);
     }
     set
+}
+
+/// Load persisted window state from snapshot.
+/// Returns (config_names, non_config_app_ids) or None to fall back to all config windows.
+fn load_persisted_state(name: &str) -> Option<(std::collections::HashSet<String>, Vec<String>)> {
+    let snapshot = workspace::load_workspace_snapshot(name).ok()??;
+
+    if snapshot.windows.is_empty() {
+        return None;
+    }
+
+    let config_names: std::collections::HashSet<String> = snapshot.windows.iter()
+        .filter_map(|w| w.config_name.clone())
+        .collect();
+
+    // Legacy snapshot: no config_names extracted yet
+    if config_names.is_empty() {
+        return None;
+    }
+
+    let non_config_apps: Vec<String> = snapshot.windows.iter()
+        .filter(|w| w.config_name.is_none())
+        .filter_map(|w| w.app_id.clone())
+        .collect();
+
+    Some((config_names, non_config_apps))
 }
 

@@ -126,6 +126,10 @@ impl DaemonInner {
                                     .map(|w| drift_core::workspace::SavedWindow {
                                         app_id: w.app_id.clone(),
                                         title: w.title.clone(),
+                                        config_name: drift_core::workspace::extract_config_name(
+                                            w.title.as_deref(),
+                                            &project,
+                                        ),
                                     })
                                     .collect();
                                 if let Err(e) = drift_core::workspace::write_snapshot(&project, windows) {

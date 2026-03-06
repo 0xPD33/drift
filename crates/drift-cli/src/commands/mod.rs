@@ -51,7 +51,39 @@ pub enum CommanderCommand {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    // ── Workspace ──────────────────────────────────────────────
+    /// Open a project workspace
+    #[command(next_help_heading = "Workspace")]
+    Open {
+        /// Project name
+        name: String,
+    },
+    /// Close a project workspace
+    Close {
+        /// Project name (default: current workspace)
+        name: Option<String>,
+    },
+    /// Switch to another project (saves current first)
+    To {
+        /// Project name
+        name: String,
+    },
+    /// Save current workspace state
+    Save {
+        /// Project name (default: current workspace)
+        name: Option<String>,
+    },
+    /// Show status of current project
+    Status,
+    /// Restore previously-open projects
+    Restore {
+        /// Project name (omit to restore entire session)
+        name: Option<String>,
+    },
+
+    // ── Project ────────────────────────────────────────────────
     /// Initialize a new project
+    #[command(next_help_heading = "Project")]
     Init {
         /// Project name
         name: String,
@@ -69,16 +101,6 @@ pub enum Commands {
         /// Show archived projects instead
         #[arg(long)]
         archived: bool,
-    },
-    /// Open a project workspace
-    Open {
-        /// Project name
-        name: String,
-    },
-    /// Close a project workspace
-    Close {
-        /// Project name (default: current workspace)
-        name: Option<String>,
     },
     /// Archive a project (reversible)
     Archive {
@@ -98,24 +120,40 @@ pub enum Commands {
         #[arg(long)]
         yes: bool,
     },
-    /// Save current workspace state
-    Save {
-        /// Project name (default: current workspace)
-        name: Option<String>,
+    /// Add items to a project (services, windows, env vars, ports)
+    Add {
+        #[command(subcommand)]
+        command: add::AddCommand,
     },
-    /// Output project/service/agent state as JSON (for shell integration)
-    ShellData,
-    /// Show status of current project
-    Status,
-    /// Switch to another project (saves current first)
-    To {
-        /// Project name
-        name: String,
+    /// Remove items from a project (services, windows, env vars, ports)
+    Remove {
+        #[command(subcommand)]
+        command: remove::RemoveCommand,
     },
+
+    // ── Inspect ────────────────────────────────────────────────
     /// Print environment variables for a project
+    #[command(next_help_heading = "Inspect")]
     Env {
         /// Project name (default: current workspace)
         name: Option<String>,
+    },
+    /// Show allocated ports for a project
+    Ports {
+        /// Project name (default: current)
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// View service logs
+    Logs {
+        /// Service name (omit to list available logs)
+        service: Option<String>,
+        /// Follow log output (tail -f)
+        #[arg(short, long)]
+        follow: bool,
+        /// Project name (default: current)
+        #[arg(long)]
+        project: Option<String>,
     },
     /// View event stream
     Events {
@@ -135,11 +173,7 @@ pub enum Commands {
         #[arg(long)]
         project: Option<String>,
     },
-    /// Regenerate niri-rules.kdl
-    NiriRules,
-    /// Run the drift daemon (for systemd, runs in foreground)
-    Daemon,
-    /// Send a notification to the drift notification bus
+    /// Send a notification to the drift event bus
     Notify {
         /// Project name (default: $DRIFT_PROJECT)
         #[arg(long)]
@@ -159,43 +193,25 @@ pub enum Commands {
         #[arg(default_value = "")]
         body: String,
     },
-    /// View service logs
-    Logs {
-        /// Service name (omit to list available logs)
-        service: Option<String>,
-        /// Follow log output (tail -f)
-        #[arg(short, long)]
-        follow: bool,
-        /// Project name (default: current)
-        #[arg(long)]
-        project: Option<String>,
-    },
-    /// Add items to a project (services, windows, env vars, ports)
-    Add {
-        #[command(subcommand)]
-        command: add::AddCommand,
-    },
-    /// Remove items from a project (services, windows, env vars, ports)
-    Remove {
-        #[command(subcommand)]
-        command: remove::RemoveCommand,
-    },
-    /// Restore previously-open projects
-    Restore {
-        /// Project name (omit to restore entire session)
-        name: Option<String>,
-    },
-    /// Show allocated ports for a project
-    Ports {
-        /// Project name (default: current)
-        #[arg(long)]
-        project: Option<String>,
-    },
+
+    // ── Advanced ───────────────────────────────────────────────
     /// TTS event announcer
+    #[command(next_help_heading = "Advanced")]
     Commander {
         #[command(subcommand)]
         command: CommanderCommand,
     },
+
+    // ── Hidden (internal) ──────────────────────────────────────
+    /// Run the drift daemon (for systemd, runs in foreground)
+    #[command(hide = true)]
+    Daemon,
+    /// Regenerate niri-rules.kdl
+    #[command(hide = true)]
+    NiriRules,
+    /// Output project/service/agent state as JSON (for shell integration)
+    #[command(hide = true)]
+    ShellData,
     /// Internal: run service supervisor (not for direct use)
     #[command(name = "_supervisor", hide = true)]
     Supervisor {

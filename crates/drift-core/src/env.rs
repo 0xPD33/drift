@@ -84,7 +84,7 @@ mod tests {
                 icon: None,
             },
             auto_close: true,
-            persist_windows: false,
+            persist_windows: None,
             env: EnvConfig::default(),
             git: None,
             ports: None,

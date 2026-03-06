@@ -25,6 +25,8 @@ pub struct Defaults {
     pub editor: String,
     #[serde(default = "default_shell")]
     pub shell: String,
+    #[serde(default)]
+    pub persist_windows: bool,
 }
 
 impl Default for Defaults {
@@ -33,6 +35,7 @@ impl Default for Defaults {
             terminal: default_terminal(),
             editor: default_editor(),
             shell: default_shell(),
+            persist_windows: false,
         }
     }
 }
@@ -181,8 +184,8 @@ pub struct ProjectConfig {
     pub project: ProjectMeta,
     #[serde(default = "default_true")]
     pub auto_close: bool,
-    #[serde(default)]
-    pub persist_windows: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persist_windows: Option<bool>,
     #[serde(default)]
     pub env: EnvConfig,
     #[serde(default)]
@@ -647,7 +650,7 @@ replay_on_subscribe = 10
                 icon: None,
             },
             auto_close: true,
-            persist_windows: false,
+            persist_windows: None,
             env: EnvConfig::default(),
             git: None,
             ports: None,
@@ -692,7 +695,7 @@ replay_on_subscribe = 10
                 icon: None,
             },
             auto_close: true,
-            persist_windows: false,
+            persist_windows: None,
             env: EnvConfig::default(),
             git: None,
             ports: None,
@@ -721,7 +724,7 @@ replay_on_subscribe = 10
                 icon: None,
             },
             auto_close: true,
-            persist_windows: false,
+            persist_windows: None,
             env: EnvConfig::default(),
             git: None,
             ports: Some(ProjectPorts {
@@ -759,7 +762,7 @@ replay_on_subscribe = 10
                 icon: None,
             },
             auto_close: true,
-            persist_windows: false,
+            persist_windows: None,
             env: EnvConfig::default(),
             git: None,
             ports: None,
@@ -803,7 +806,7 @@ replay_on_subscribe = 10
                 icon: None,
             },
             auto_close: true,
-            persist_windows: false,
+            persist_windows: None,
             env: EnvConfig::default(),
             git: None,
             ports: None,

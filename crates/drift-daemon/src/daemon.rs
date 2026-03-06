@@ -121,20 +121,7 @@ impl DaemonInner {
                     if let Some(prev_id) = self.focused_workspace_id {
                         if prev_id != id {
                             if let Some(project) = self.workspace_to_project.get(&prev_id).cloned() {
-                                let windows: Vec<drift_core::workspace::SavedWindow> = self.windows.values()
-                                    .filter(|w| w.workspace_id == Some(prev_id))
-                                    .map(|w| drift_core::workspace::SavedWindow {
-                                        app_id: w.app_id.clone(),
-                                        title: w.title.clone(),
-                                        config_name: drift_core::workspace::extract_config_name(
-                                            w.title.as_deref(),
-                                            &project,
-                                        ),
-                                    })
-                                    .collect();
-                                if let Err(e) = drift_core::workspace::write_snapshot(&project, windows) {
-                                    eprintln!("auto-save workspace '{project}': {e}");
-                                }
+                                self.save_workspace_snapshot(&project, prev_id);
 
                                 let running_windows: Vec<(String, Option<String>)> = self.windows.values()
                                     .filter(|w| w.workspace_id == Some(prev_id))
@@ -210,6 +197,15 @@ impl DaemonInner {
             }
             NiriEvent::WindowClosed { id } => {
                 let ws_id = self.windows.get(&id).and_then(|w| w.workspace_id);
+
+                // Save snapshot BEFORE removing window so the state is captured
+                // while windows still exist (important for persist_windows)
+                if let Some(ws_id) = ws_id {
+                    if let Some(project) = self.workspace_to_project.get(&ws_id).cloned() {
+                        self.save_workspace_snapshot(&project, ws_id);
+                    }
+                }
+
                 self.windows.remove(&id);
 
                 if let Some(ws_id) = ws_id {
@@ -269,6 +265,23 @@ impl DaemonInner {
         self.active_project = self.focused_workspace_id
             .and_then(|id| self.workspace_to_project.get(&id))
             .cloned();
+    }
+
+    fn save_workspace_snapshot(&self, project: &str, ws_id: u64) {
+        let windows: Vec<drift_core::workspace::SavedWindow> = self.windows.values()
+            .filter(|w| w.workspace_id == Some(ws_id))
+            .map(|w| drift_core::workspace::SavedWindow {
+                app_id: w.app_id.clone(),
+                title: w.title.clone(),
+                config_name: drift_core::workspace::extract_config_name(
+                    w.title.as_deref(),
+                    project,
+                ),
+            })
+            .collect();
+        if let Err(e) = drift_core::workspace::write_snapshot(project, windows) {
+            eprintln!("auto-save workspace '{project}': {e}");
+        }
     }
 
     fn auto_close_project(&mut self, project_name: &str) {

@@ -122,7 +122,8 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     let repo_str = repo_path.to_string_lossy();
 
     // Determine which windows to spawn (persist_windows uses snapshot state)
-    let snapshot_apps = if project.persist_windows {
+    let persist = project.persist_windows.unwrap_or(global.defaults.persist_windows);
+    let snapshot_apps = if persist {
         load_persisted_state(name)
     } else {
         None
@@ -195,7 +196,7 @@ pub fn run(name: &str) -> anyhow::Result<()> {
         }
     }
 
-    // Restore non-config apps from snapshot (user-opened GUI apps)
+    // Restore non-config apps from snapshot (user-opened apps)
     if let Some((_, ref non_config_apps)) = snapshot_apps {
         for app_id in non_config_apps {
             let launch_cmd = drift_core::sync::resolve_app_launch_command(app_id);

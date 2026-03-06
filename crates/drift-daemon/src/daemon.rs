@@ -197,19 +197,13 @@ impl DaemonInner {
             }
             NiriEvent::WindowClosed { id } => {
                 let ws_id = self.windows.get(&id).and_then(|w| w.workspace_id);
+                self.windows.remove(&id);
 
-                // Save snapshot BEFORE removing window so the state is captured
-                // while windows still exist (important for persist_windows)
+                // Save snapshot AFTER removing so the closed window is excluded
                 if let Some(ws_id) = ws_id {
                     if let Some(project) = self.workspace_to_project.get(&ws_id).cloned() {
                         self.save_workspace_snapshot(&project, ws_id);
-                    }
-                }
 
-                self.windows.remove(&id);
-
-                if let Some(ws_id) = ws_id {
-                    if let Some(project) = self.workspace_to_project.get(&ws_id).cloned() {
                         let has_windows = self.windows.values().any(|w| w.workspace_id == Some(ws_id));
                         if !has_windows {
                             self.auto_close_project(&project);
@@ -277,6 +271,7 @@ impl DaemonInner {
                     w.title.as_deref(),
                     project,
                 ),
+                width: Some(w.layout.tile_size.0),
             })
             .collect();
         if let Err(e) = drift_core::workspace::write_snapshot(project, windows) {

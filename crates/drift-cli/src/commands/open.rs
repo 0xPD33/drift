@@ -130,9 +130,9 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     };
 
     let windows_to_spawn: Vec<&config::WindowConfig> = match &snapshot_apps {
-        Some((config_names, _)) => {
+        Some(state) => {
             project.windows.iter()
-                .filter(|w| w.name.as_ref().is_some_and(|n| config_names.contains(n.as_str())))
+                .filter(|w| w.name.as_ref().is_some_and(|n| state.config_names.contains(n.as_str())))
                 .collect()
         }
         None => project.windows.iter().collect(),
@@ -175,10 +175,15 @@ pub fn run(name: &str) -> anyhow::Result<()> {
                 .unwrap_or("shell");
             println!("  Spawned window '{label}'");
 
-            if let (Some(wn), Some(width_str)) = (wn, window.width.as_deref()) {
-                if let Some(change) = niri::parse_width(width_str) {
-                    let title = format!("drift:{name}/{wn}");
-                    width_requests.push((title, change));
+            if let Some(wn) = wn {
+                let title = format!("drift:{name}/{wn}");
+                // Prefer snapshot width (actual size), fall back to config width
+                if let Some(saved_w) = snapshot_apps.as_ref().and_then(|s| s.widths.get(wn)) {
+                    width_requests.push((title, niri_ipc::SizeChange::SetFixed(*saved_w as i32)));
+                } else if let Some(width_str) = window.width.as_deref() {
+                    if let Some(change) = niri::parse_width(width_str) {
+                        width_requests.push((title, change));
+                    }
                 }
             }
         }
@@ -197,8 +202,8 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     }
 
     // Restore non-config apps from snapshot (user-opened apps)
-    if let Some((_, ref non_config_apps)) = snapshot_apps {
-        for app_id in non_config_apps {
+    if let Some(ref state) = snapshot_apps {
+        for app_id in &state.non_config_apps {
             let launch_cmd = drift_core::sync::resolve_app_launch_command(app_id);
             let args: Vec<String> = launch_cmd.split_whitespace().map(String::from).collect();
             niri_client.spawn(args)?;
@@ -478,9 +483,14 @@ fn collect_ports(ports: &drift_core::config::ProjectPorts) -> std::collections::
     set
 }
 
+struct PersistedState {
+    config_names: std::collections::HashSet<String>,
+    non_config_apps: Vec<String>,
+    widths: std::collections::HashMap<String, f64>,
+}
+
 /// Load persisted window state from snapshot.
-/// Returns (config_names, non_config_app_ids) or None to fall back to all config windows.
-fn load_persisted_state(name: &str) -> Option<(std::collections::HashSet<String>, Vec<String>)> {
+fn load_persisted_state(name: &str) -> Option<PersistedState> {
     let snapshot = workspace::load_workspace_snapshot(name).ok()??;
 
     if snapshot.windows.is_empty() {
@@ -501,6 +511,10 @@ fn load_persisted_state(name: &str) -> Option<(std::collections::HashSet<String>
         .filter_map(|w| w.app_id.clone())
         .collect();
 
-    Some((config_names, non_config_apps))
+    let widths: std::collections::HashMap<String, f64> = snapshot.windows.iter()
+        .filter_map(|w| Some((w.config_name.clone()?, w.width?)))
+        .collect();
+
+    Some(PersistedState { config_names, non_config_apps, widths })
 }
 

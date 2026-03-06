@@ -18,6 +18,8 @@ pub struct SavedWindow {
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<f64>,
 }
 
 /// Extract window config name from drift title pattern "drift:project/name"
@@ -43,6 +45,7 @@ pub fn save_workspace(project: &str) -> anyhow::Result<()> {
             app_id: w.app_id.clone(),
             title: w.title.clone(),
             config_name: extract_config_name(w.title.as_deref(), project),
+            width: Some(w.layout.tile_size.0),
         })
         .collect();
 
@@ -96,11 +99,13 @@ mod tests {
                     app_id: Some("org.mozilla.firefox".into()),
                     title: Some("Home - Firefox".into()),
                     config_name: None,
+                    width: None,
                 },
                 SavedWindow {
                     app_id: Some("com.mitchellh.ghostty".into()),
                     title: Some("~/code/myapp".into()),
                     config_name: None,
+                    width: None,
                 },
             ],
         };
@@ -119,6 +124,7 @@ mod tests {
             app_id: None,
             title: None,
             config_name: None,
+            width: None,
         };
         let json = serde_json::to_string(&window).unwrap();
         let parsed: SavedWindow = serde_json::from_str(&json).unwrap();
@@ -132,6 +138,7 @@ mod tests {
             app_id: Some("kitty".into()),
             title: Some("terminal".into()),
             config_name: None,
+            width: None,
         };
         let json = serde_json::to_string(&window).unwrap();
         let parsed: SavedWindow = serde_json::from_str(&json).unwrap();
@@ -155,6 +162,7 @@ mod tests {
                     app_id: Some("app1".into()),
                     title: Some("Win 1".into()),
                     config_name: None,
+                    width: None,
                 },
             ],
         };

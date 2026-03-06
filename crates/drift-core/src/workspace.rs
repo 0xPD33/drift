@@ -20,6 +20,10 @@ pub struct SavedWindow {
     pub config_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub width: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column_index: Option<usize>,
 }
 
 /// Extract window config name from drift title pattern "drift:project/name"
@@ -46,6 +50,8 @@ pub fn save_workspace(project: &str) -> anyhow::Result<()> {
             title: w.title.clone(),
             config_name: extract_config_name(w.title.as_deref(), project),
             width: Some(w.layout.tile_size.0),
+            height: Some(w.layout.tile_size.1),
+            column_index: w.layout.pos_in_scrolling_layout.map(|(col, _)| col),
         })
         .collect();
 
@@ -100,12 +106,16 @@ mod tests {
                     title: Some("Home - Firefox".into()),
                     config_name: None,
                     width: None,
+                    height: None,
+                    column_index: None,
                 },
                 SavedWindow {
                     app_id: Some("com.mitchellh.ghostty".into()),
                     title: Some("~/code/myapp".into()),
                     config_name: None,
                     width: None,
+                    height: None,
+                    column_index: None,
                 },
             ],
         };
@@ -125,6 +135,8 @@ mod tests {
             title: None,
             config_name: None,
             width: None,
+            height: None,
+            column_index: None,
         };
         let json = serde_json::to_string(&window).unwrap();
         let parsed: SavedWindow = serde_json::from_str(&json).unwrap();
@@ -139,6 +151,8 @@ mod tests {
             title: Some("terminal".into()),
             config_name: None,
             width: None,
+            height: None,
+            column_index: None,
         };
         let json = serde_json::to_string(&window).unwrap();
         let parsed: SavedWindow = serde_json::from_str(&json).unwrap();
@@ -163,6 +177,8 @@ mod tests {
                     title: Some("Win 1".into()),
                     config_name: None,
                     width: None,
+                    height: None,
+                    column_index: None,
                 },
             ],
         };

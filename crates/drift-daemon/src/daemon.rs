@@ -49,11 +49,12 @@ struct DaemonInner {
     events: HashMap<String, VecDeque<Event>>,
     buffer_size: usize,
     terminal_name: String,
+    global_persist_windows: bool,
     subscriber_tx: mpsc::Sender<Event>,
 }
 
 impl DaemonInner {
-    fn new(subscriber_tx: mpsc::Sender<Event>, buffer_size: usize, terminal_name: String) -> Self {
+    fn new(subscriber_tx: mpsc::Sender<Event>, buffer_size: usize, terminal_name: String, global_persist_windows: bool) -> Self {
         let known_projects: HashSet<String> = drift_core::registry::list_projects()
             .unwrap_or_default()
             .into_iter()
@@ -70,6 +71,7 @@ impl DaemonInner {
             events: HashMap::new(),
             buffer_size,
             terminal_name,
+            global_persist_windows,
             subscriber_tx,
         }
     }
@@ -123,15 +125,22 @@ impl DaemonInner {
                             if let Some(project) = self.workspace_to_project.get(&prev_id).cloned() {
                                 self.save_workspace_snapshot(&project, prev_id);
 
-                                let running_windows: Vec<(String, Option<String>)> = self.windows.values()
-                                    .filter(|w| w.workspace_id == Some(prev_id))
-                                    .filter_map(|w| {
-                                        let app_id = w.app_id.clone()?;
-                                        Some((app_id, w.title.clone()))
-                                    })
-                                    .collect();
-                                if let Err(e) = drift_core::sync::sync_windows_to_config(&project, &running_windows, &self.terminal_name) {
-                                    eprintln!("auto-sync windows for '{project}': {e}");
+                                let persist = drift_core::config::load_project_config(&project)
+                                    .ok()
+                                    .and_then(|cfg| cfg.persist_windows)
+                                    .unwrap_or(self.global_persist_windows);
+
+                                if !persist {
+                                    let running_windows: Vec<(String, Option<String>)> = self.windows.values()
+                                        .filter(|w| w.workspace_id == Some(prev_id))
+                                        .filter_map(|w| {
+                                            let app_id = w.app_id.clone()?;
+                                            Some((app_id, w.title.clone()))
+                                        })
+                                        .collect();
+                                    if let Err(e) = drift_core::sync::sync_windows_to_config(&project, &running_windows, &self.terminal_name) {
+                                        eprintln!("auto-sync windows for '{project}': {e}");
+                                    }
                                 }
 
                                 self.process_event(Event {
@@ -272,6 +281,8 @@ impl DaemonInner {
                     project,
                 ),
                 width: Some(w.layout.tile_size.0),
+                height: Some(w.layout.tile_size.1),
+                column_index: w.layout.pos_in_scrolling_layout.map(|(col, _)| col),
             })
             .collect();
         if let Err(e) = drift_core::workspace::write_snapshot(project, windows) {
@@ -478,7 +489,8 @@ pub fn run_daemon() -> anyhow::Result<()> {
     let (msg_tx, msg_rx) = mpsc::channel::<DaemonMsg>();
     let (sub_tx, sub_rx) = mpsc::channel::<Event>();
 
-    let mut inner = DaemonInner::new(sub_tx, events_config.buffer_size, terminal_name);
+    let global_persist_windows = global_config.defaults.persist_windows;
+    let mut inner = DaemonInner::new(sub_tx, events_config.buffer_size, terminal_name, global_persist_windows);
 
     let tx_events = msg_tx.clone();
     let event_thread = thread::Builder::new()
@@ -555,6 +567,7 @@ mod tests {
             events: HashMap::new(),
             buffer_size: 200,
             terminal_name: "ghostty".into(),
+            global_persist_windows: false,
             subscriber_tx: tx,
         }
     }

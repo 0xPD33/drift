@@ -150,6 +150,20 @@ impl NiriClient {
         }
     }
 
+    pub fn set_window_height(&mut self, id: u64, change: SizeChange) -> anyhow::Result<()> {
+        let reply = self
+            .socket
+            .send(Request::Action(Action::SetWindowHeight {
+                id: Some(id),
+                change,
+            }))?;
+        match reply {
+            Ok(Response::Handled) => Ok(()),
+            Ok(other) => bail!("unexpected response: {other:?}"),
+            Err(msg) => bail!("niri error: {msg}"),
+        }
+    }
+
     pub fn unset_workspace_name(&mut self, name: &str) -> anyhow::Result<()> {
         let reply =
             self.socket

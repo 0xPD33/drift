@@ -129,7 +129,7 @@ pub fn run(name: &str) -> anyhow::Result<()> {
         None
     };
 
-    let windows_to_spawn: Vec<&config::WindowConfig> = match &snapshot_apps {
+    let mut windows_to_spawn: Vec<&config::WindowConfig> = match &snapshot_apps {
         Some(state) => {
             project.windows.iter()
                 .filter(|w| w.name.as_ref().is_some_and(|n| state.config_names.contains(n.as_str())))
@@ -138,15 +138,26 @@ pub fn run(name: &str) -> anyhow::Result<()> {
         None => project.windows.iter().collect(),
     };
 
+    // Sort by snapshot column order so windows reopen in the same positions
+    if let Some(ref state) = snapshot_apps {
+        windows_to_spawn.sort_by_key(|w| {
+            w.name.as_ref()
+                .and_then(|n| state.column_order.get(n.as_str()))
+                .copied()
+                .unwrap_or(usize::MAX)
+        });
+    }
+
     // Partition windows into tmux and normal
     let (tmux_windows, normal_windows): (Vec<_>, Vec<_>) = windows_to_spawn
         .into_iter()
         .partition(|w| w.tmux == Some(true));
 
-    // Collect (title, width) pairs for windows that need sizing after spawn
+    // Collect (title, size_change) pairs for windows that need sizing after spawn
     let mut width_requests: Vec<(String, niri_ipc::SizeChange)> = Vec::new();
+    let mut height_requests: Vec<(String, niri_ipc::SizeChange)> = Vec::new();
 
-    if normal_windows.is_empty() && tmux_windows.is_empty() {
+    if normal_windows.is_empty() && tmux_windows.is_empty() && snapshot_apps.is_none() {
         let args = build_terminal_args(terminal, name, None, &export_str, &repo_str, None);
         niri_client.spawn(args)?;
         println!("  Spawned default terminal window");
@@ -179,11 +190,15 @@ pub fn run(name: &str) -> anyhow::Result<()> {
                 let title = format!("drift:{name}/{wn}");
                 // Prefer snapshot width (actual size), fall back to config width
                 if let Some(saved_w) = snapshot_apps.as_ref().and_then(|s| s.widths.get(wn)) {
-                    width_requests.push((title, niri_ipc::SizeChange::SetFixed(*saved_w as i32)));
+                    width_requests.push((title.clone(), niri_ipc::SizeChange::SetFixed(*saved_w as i32)));
                 } else if let Some(width_str) = window.width.as_deref() {
                     if let Some(change) = niri::parse_width(width_str) {
-                        width_requests.push((title, change));
+                        width_requests.push((title.clone(), change));
                     }
+                }
+                // Restore snapshot height
+                if let Some(saved_h) = snapshot_apps.as_ref().and_then(|s| s.heights.get(wn)) {
+                    height_requests.push((title, niri_ipc::SizeChange::SetFixed(*saved_h as i32)));
                 }
             }
         }
@@ -246,9 +261,9 @@ pub fn run(name: &str) -> anyhow::Result<()> {
         }
     }
 
-    // Apply window widths via IPC (windows need time to register with niri)
-    if !width_requests.is_empty() {
-        apply_window_widths(&mut niri_client, &width_requests);
+    // Apply window sizes via IPC (windows need time to register with niri)
+    if !width_requests.is_empty() || !height_requests.is_empty() {
+        apply_window_sizes(&mut niri_client, &width_requests, &height_requests);
     }
 
     drift_core::events::try_emit_event(&drift_core::events::Event {
@@ -429,17 +444,32 @@ fn check_port_conflicts(
     }
 }
 
-fn apply_window_widths(
+fn apply_window_sizes(
     niri_client: &mut niri::NiriClient,
-    requests: &[(String, niri_ipc::SizeChange)],
+    width_requests: &[(String, niri_ipc::SizeChange)],
+    height_requests: &[(String, niri_ipc::SizeChange)],
 ) {
+    // Collect all unique titles that need sizing
+    let all_titles: std::collections::HashSet<&str> = width_requests.iter()
+        .chain(height_requests.iter())
+        .map(|(t, _)| t.as_str())
+        .collect();
+
     // Wait for windows to register with niri
     std::thread::sleep(Duration::from_millis(500));
 
-    let mut pending: Vec<&(String, niri_ipc::SizeChange)> = requests.iter().collect();
+    let mut pending_titles: Vec<&str> = all_titles.iter().copied().collect();
+
+    // Build lookup maps for quick access
+    let width_map: std::collections::HashMap<&str, niri_ipc::SizeChange> = width_requests.iter()
+        .map(|(t, c)| (t.as_str(), *c))
+        .collect();
+    let height_map: std::collections::HashMap<&str, niri_ipc::SizeChange> = height_requests.iter()
+        .map(|(t, c)| (t.as_str(), *c))
+        .collect();
 
     for attempt in 0..5 {
-        if pending.is_empty() {
+        if pending_titles.is_empty() {
             break;
         }
         if attempt > 0 {
@@ -447,26 +477,33 @@ fn apply_window_widths(
         }
 
         let mut still_pending = Vec::new();
-        for req in &pending {
-            match niri_client.find_window_by_title(&req.0) {
+        for title in &pending_titles {
+            match niri_client.find_window_by_title(title) {
                 Ok(Some(window)) => {
-                    if let Err(e) = niri_client.set_window_width(window.id, req.1) {
-                        eprintln!("  Warning: failed to set width for '{}': {e}", req.0);
+                    if let Some(change) = width_map.get(title) {
+                        if let Err(e) = niri_client.set_window_width(window.id, *change) {
+                            eprintln!("  Warning: failed to set width for '{title}': {e}");
+                        }
+                    }
+                    if let Some(change) = height_map.get(title) {
+                        if let Err(e) = niri_client.set_window_height(window.id, *change) {
+                            eprintln!("  Warning: failed to set height for '{title}': {e}");
+                        }
                     }
                 }
                 Ok(None) => {
-                    still_pending.push(*req);
+                    still_pending.push(*title);
                 }
                 Err(e) => {
-                    eprintln!("  Warning: failed to find window '{}': {e}", req.0);
+                    eprintln!("  Warning: failed to find window '{title}': {e}");
                 }
             }
         }
-        pending = still_pending;
+        pending_titles = still_pending;
     }
 
-    for req in &pending {
-        eprintln!("  Warning: window '{}' not found for width setting", req.0);
+    for title in &pending_titles {
+        eprintln!("  Warning: window '{title}' not found for size setting");
     }
 }
 
@@ -487,6 +524,8 @@ struct PersistedState {
     config_names: std::collections::HashSet<String>,
     non_config_apps: Vec<String>,
     widths: std::collections::HashMap<String, f64>,
+    heights: std::collections::HashMap<String, f64>,
+    column_order: std::collections::HashMap<String, usize>,
 }
 
 /// Load persisted window state from snapshot.
@@ -515,6 +554,14 @@ fn load_persisted_state(name: &str) -> Option<PersistedState> {
         .filter_map(|w| Some((w.config_name.clone()?, w.width?)))
         .collect();
 
-    Some(PersistedState { config_names, non_config_apps, widths })
+    let heights: std::collections::HashMap<String, f64> = snapshot.windows.iter()
+        .filter_map(|w| Some((w.config_name.clone()?, w.height?)))
+        .collect();
+
+    let column_order: std::collections::HashMap<String, usize> = snapshot.windows.iter()
+        .filter_map(|w| Some((w.config_name.clone()?, w.column_index?)))
+        .collect();
+
+    Some(PersistedState { config_names, non_config_apps, widths, heights, column_order })
 }
 

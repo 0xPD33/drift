@@ -15,6 +15,7 @@ QtObject {
 
     property bool showing: false
     property bool _visible: false
+    property bool createMode: false
 
     onShowingChanged: {
         if (showing) {
@@ -388,6 +389,81 @@ QtObject {
                                 }
                             }
                         }
+
+                        // Create project row
+                        Rectangle {
+                            width: folderColumn.width
+                            height: 34
+                            radius: 8
+                            color: root.createMode
+                                ? root.bgSecondary
+                                : createBtnMouse.containsMouse
+                                    ? Qt.lighter(root.bgSecondary, 1.2)
+                                    : "transparent"
+
+                            Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
+
+                            Row {
+                                visible: !root.createMode
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: 10
+                                spacing: 8
+
+                                Text {
+                                    text: "+"
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    color: root.textDim
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                Text {
+                                    text: "New project"
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 13
+                                    color: root.textDim
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            MouseArea {
+                                id: createBtnMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                visible: !root.createMode
+                                onClicked: {
+                                    root.createMode = true;
+                                    createInput.text = "";
+                                    createInput.forceActiveFocus();
+                                }
+                            }
+
+                            TextInput {
+                                id: createInput
+                                visible: root.createMode
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13
+                                color: root.textColor
+                                onAccepted: {
+                                    var name = text.trim();
+                                    if (name !== "") {
+                                        initProc.command = ["drift", "init", name];
+                                        initProc.running = true;
+                                    }
+                                    root.createMode = false;
+                                }
+                                Keys.onEscapePressed: {
+                                    root.createMode = false;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -401,6 +477,11 @@ QtObject {
         Process {
             id: closeProc
             command: ["drift", "close", ""]
+        }
+
+        Process {
+            id: initProc
+            command: ["drift", "init", ""]
         }
     }
 }

@@ -522,21 +522,26 @@ impl DaemonInner {
                     })
                 })
                 .collect(),
-            all_workspaces: self.workspaces.values()
-                .map(|ws| {
-                    let window_count = self.windows.values()
-                        .filter(|w| w.workspace_id == Some(ws.id))
-                        .count() as u32;
-                    NiriWorkspace {
-                        workspace_id: ws.id,
-                        name: ws.name.clone(),
-                        is_active: ws.is_active,
-                        is_focused: ws.is_focused,
-                        window_count,
-                        project: self.workspace_to_project.get(&ws.id).cloned(),
-                    }
-                })
-                .collect(),
+            all_workspaces: {
+                let mut wss: Vec<NiriWorkspace> = self.workspaces.values()
+                    .map(|ws| {
+                        let window_count = self.windows.values()
+                            .filter(|w| w.workspace_id == Some(ws.id))
+                            .count() as u32;
+                        NiriWorkspace {
+                            workspace_id: ws.id,
+                            idx: ws.idx as u64,
+                            name: ws.name.clone(),
+                            is_active: ws.is_active,
+                            is_focused: ws.is_focused,
+                            window_count,
+                            project: self.workspace_to_project.get(&ws.id).cloned(),
+                        }
+                    })
+                    .collect();
+                wss.sort_by_key(|ws| ws.idx);
+                wss
+            },
             recent_events: self.events.iter()
                 .map(|(k, v)| (k.clone(), v.iter().cloned().collect()))
                 .collect(),

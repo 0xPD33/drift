@@ -22,6 +22,7 @@ impl Default for FocusState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NiriWorkspace {
     pub workspace_id: u64,
+    pub idx: u64,
     pub name: Option<String>,
     pub is_active: bool,
     pub is_focused: bool,
@@ -107,6 +108,7 @@ mod tests {
             all_workspaces: vec![
                 NiriWorkspace {
                     workspace_id: 1,
+                    idx: 1,
                     name: Some("myapp".into()),
                     is_active: true,
                     is_focused: true,
@@ -115,6 +117,7 @@ mod tests {
                 },
                 NiriWorkspace {
                     workspace_id: 2,
+                    idx: 2,
                     name: Some("other".into()),
                     is_active: false,
                     is_focused: false,
@@ -123,6 +126,7 @@ mod tests {
                 },
                 NiriWorkspace {
                     workspace_id: 3,
+                    idx: 3,
                     name: Some("browser".into()),
                     is_active: false,
                     is_focused: false,
@@ -199,6 +203,7 @@ mod tests {
             all_workspaces: vec![
                 NiriWorkspace {
                     workspace_id: 10,
+                    idx: 1,
                     name: Some("myproject".into()),
                     is_active: true,
                     is_focused: true,
@@ -207,6 +212,7 @@ mod tests {
                 },
                 NiriWorkspace {
                     workspace_id: 11,
+                    idx: 2,
                     name: Some("random-ws".into()),
                     is_active: false,
                     is_focused: false,
@@ -215,6 +221,7 @@ mod tests {
                 },
                 NiriWorkspace {
                     workspace_id: 12,
+                    idx: 3,
                     name: None,
                     is_active: false,
                     is_focused: false,

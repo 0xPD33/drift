@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -263,7 +264,7 @@ QtObject {
                                     property var ws: modelData
                                     property bool hasProject: !!ws.project
                                     property bool hovered: false
-                                    property string displayName: ws.name || ("Workspace " + (index + 1))
+                                    property string displayName: ws.name || ("Workspace " + (ws.idx || (index + 1)))
 
                                     // --- Working mode ---
                                     Rectangle {
@@ -750,7 +751,7 @@ QtObject {
                                         hoverEnabled: true
                                     }
 
-                                    Row {
+                                    RowLayout {
                                         id: unmanagedRow
                                         x: 10
                                         anchors.verticalCenter: parent.verticalCenter

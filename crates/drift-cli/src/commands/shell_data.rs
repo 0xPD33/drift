@@ -34,6 +34,7 @@ struct ShellData {
 #[derive(Serialize)]
 struct WorkspaceInfo {
     id: u64,
+    idx: u8,
     name: Option<String>,
     is_focused: bool,
     window_count: u32,
@@ -140,7 +141,8 @@ pub fn run() -> anyhow::Result<()> {
         .unwrap_or(false);
 
     // Query niri directly for the authoritative workspace + window state
-    let (niri_workspaces, niri_windows) = query_niri();
+    let (mut niri_workspaces, niri_windows) = query_niri();
+    niri_workspaces.sort_by_key(|ws| ws.idx);
 
     // Compute window count per workspace
     let mut window_counts: HashMap<u64, u32> = HashMap::new();
@@ -200,6 +202,7 @@ pub fn run() -> anyhow::Result<()> {
             });
             WorkspaceInfo {
                 id: ws.id,
+                idx: ws.idx,
                 name: ws.name.clone(),
                 is_focused: ws.is_focused,
                 window_count,

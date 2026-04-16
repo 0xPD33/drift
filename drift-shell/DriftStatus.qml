@@ -13,6 +13,12 @@ Rectangle {
 
     signal clicked()
 
+    property var _summary: driftState ? (driftState.globalSummary || {}) : {}
+    property int agentCount: _summary.total_agents_running || 0
+    property int queuedCount: _summary.total_tasks_queued || 0
+    property int reviewCount: _summary.total_reviews_pending || 0
+    property bool hasAnyCounts: agentCount > 0 || queuedCount > 0 || reviewCount > 0
+
     Layout.preferredHeight: 30
     Layout.preferredWidth: content.width + 16
     color: mouseArea.containsMouse ? Qt.lighter(bgSecondary, 1.2) : bgSecondary
@@ -113,6 +119,50 @@ Rectangle {
                         }
                     }
                 }
+            }
+        }
+
+        // Separator
+        Text {
+            visible: driftStatus.driftState && driftStatus.driftState.daemonRunning && driftStatus.hasAnyCounts
+            text: "·"
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 11
+            color: driftStatus.textDim
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
+        // Global counts
+        Row {
+            visible: driftStatus.driftState && driftStatus.driftState.daemonRunning && driftStatus.hasAnyCounts
+            spacing: 6
+            anchors.verticalCenter: parent.verticalCenter
+
+            Text {
+                visible: driftStatus.agentCount > 0
+                text: driftStatus.agentCount + "↻"
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 10
+                color: "#a0d0a0"
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+                visible: driftStatus.queuedCount > 0
+                text: driftStatus.queuedCount + "◆"
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 10
+                color: driftStatus.textDim
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+                visible: driftStatus.reviewCount > 0
+                text: driftStatus.reviewCount + "⚠"
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 10
+                color: driftStatus.reviewCount > 0 ? "#d2b46a" : driftStatus.textDim
+                anchors.verticalCenter: parent.verticalCenter
             }
         }
     }

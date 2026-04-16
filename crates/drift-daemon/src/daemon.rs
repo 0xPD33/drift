@@ -12,6 +12,8 @@ use nix::unistd::Pid;
 use drift_core::config;
 use drift_core::events::{self, Event};
 use drift_core::paths;
+#[cfg(any(feature = "drivers-claude", feature = "drivers-codex"))]
+use drift_core::driver::{AgentDriver, AgentHandle, AgentState};
 use crate::state::{DaemonState, FocusState, NiriWorkspace, WorkspaceProject};
 
 const STATE_WRITE_INTERVAL: Duration = Duration::from_secs(1);
@@ -646,6 +648,9 @@ pub fn run_daemon() -> anyhow::Result<()> {
         .name("event-stream".into())
         .spawn(move || crate::event_stream::run_event_stream(tx_events, &SHUTDOWN))?;
 
+    #[cfg(any(feature = "drivers-claude", feature = "drivers-codex"))]
+    let msg_tx_driver = msg_tx.clone();
+
     let tx_emit = msg_tx;
     let emit_thread = thread::Builder::new()
         .name("emit-listener".into())
@@ -664,6 +669,19 @@ pub fn run_daemon() -> anyhow::Result<()> {
     } else {
         drop(dispatch_rx);
         None
+    };
+
+    #[cfg(any(feature = "drivers-claude", feature = "drivers-codex"))]
+    let driver_thread = {
+        let enabled_drivers = global_config.features.drivers.clone();
+        if enabled_drivers.is_empty() {
+            None
+        } else {
+            let tx = msg_tx_driver;
+            Some(thread::Builder::new()
+                .name("driver-poll".into())
+                .spawn(move || run_driver_poll(tx, &SHUTDOWN, enabled_drivers))?)
+        }
     };
 
     if commander_enabled {
@@ -711,7 +729,125 @@ pub fn run_daemon() -> anyhow::Result<()> {
         let _ = t.join();
     }
 
+    #[cfg(any(feature = "drivers-claude", feature = "drivers-codex"))]
+    if let Some(t) = driver_thread {
+        let _ = t.join();
+    }
+
     Ok(())
+}
+
+#[cfg(any(feature = "drivers-claude", feature = "drivers-codex"))]
+fn run_driver_poll(
+    tx: mpsc::Sender<DaemonMsg>,
+    shutdown: &AtomicBool,
+    enabled_drivers: Vec<String>,
+) {
+    let interval = Duration::from_millis(1500);
+    let mut last_states: HashMap<(String, String), AgentState> = HashMap::new();
+    let mut drivers: HashMap<String, Box<dyn AgentDriver>> = HashMap::new();
+
+    #[cfg(feature = "drivers-claude")]
+    if enabled_drivers.iter().any(|d| d == "claude-code") {
+        drivers.insert(
+            "claude-code".into(),
+            Box::new(drift_core::driver::claude_code::ClaudeCodeDriver),
+        );
+    }
+    #[cfg(feature = "drivers-codex")]
+    if enabled_drivers.iter().any(|d| d == "codex") {
+        drivers.insert("codex".into(), Box::new(drift_core::driver::codex::CodexDriver));
+    }
+
+    if drivers.is_empty() {
+        return;
+    }
+
+    eprintln!("driver-poll started ({} drivers)", drivers.len());
+
+    while !shutdown.load(Ordering::Relaxed) {
+        let projects = drift_core::registry::list_projects().unwrap_or_default();
+        for proj in &projects {
+            let cwd = match config::resolve_repo_path(&proj.project.repo) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            let svcs = match proj.services.as_ref() {
+                Some(s) => &s.processes,
+                None => continue,
+            };
+            for svc in svcs {
+                let driver_name = match svc.agent.as_deref() {
+                    Some(d) => d,
+                    None => continue,
+                };
+                let driver = match drivers.get(driver_name) {
+                    Some(d) => d,
+                    None => continue,
+                };
+
+                let handle = AgentHandle {
+                    pid: None,
+                    session_id: None,
+                    driver_data: HashMap::from([
+                        ("cwd".into(), cwd.to_string_lossy().to_string()),
+                        ("tmux_session".into(), format!("drift-{}", proj.project.name)),
+                    ]),
+                };
+
+                let state = match driver.poll_state(&handle) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+
+                let key = (proj.project.name.clone(), svc.name.clone());
+                if last_states.get(&key) == Some(&state) {
+                    continue;
+                }
+
+                let event_type = match state {
+                    AgentState::Starting => "agent.started",
+                    AgentState::Working => "agent.working",
+                    AgentState::Blocked => "agent.blocked",
+                    AgentState::NeedsReview => "agent.needs_review",
+                    AgentState::Completed => "agent.completed",
+                    AgentState::Errored => "agent.error",
+                    AgentState::Idle => "agent.idle",
+                };
+                let level = match state {
+                    AgentState::Errored => "error",
+                    AgentState::Blocked | AgentState::NeedsReview => "warning",
+                    AgentState::Completed => "success",
+                    _ => "info",
+                };
+
+                let _ = tx.send(DaemonMsg::EmitEvent(Event {
+                    event_type: event_type.into(),
+                    project: proj.project.name.clone(),
+                    source: "driver".into(),
+                    ts: events::iso_now(),
+                    level: Some(level.into()),
+                    title: None,
+                    body: None,
+                    meta: Some(serde_json::json!({
+                        "agent_name": svc.name,
+                        "driver": driver_name,
+                    })),
+                    priority: None,
+                }));
+
+                last_states.insert(key, state);
+            }
+        }
+
+        let mut slept = Duration::ZERO;
+        while slept < interval && !shutdown.load(Ordering::Relaxed) {
+            thread::sleep(Duration::from_millis(100));
+            slept += Duration::from_millis(100);
+        }
+    }
+
+    eprintln!("driver-poll shutting down");
 }
 
 #[cfg(feature = "dispatch")]

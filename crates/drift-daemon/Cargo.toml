@@ -7,9 +7,12 @@ license = "MIT"
 repository = "https://github.com/0xPD33/drift"
 
 [features]
-default = ["overview", "dispatch"]
+default = ["overview", "dispatch", "drivers-claude", "drivers-codex"]
 overview = ["drift-core/overview"]
 dispatch = ["drift-core/dispatch"]
+drivers = ["drift-core/drivers"]
+drivers-claude = ["drift-core/drivers-claude", "drivers"]
+drivers-codex = ["drift-core/drivers-codex", "drivers"]
 
 [dependencies]
 drift-core = { path = "../drift-core", default-features = false }

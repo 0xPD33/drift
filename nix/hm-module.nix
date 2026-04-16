@@ -198,18 +198,22 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
 
-    # Write [features] section into drift's config.toml for runtime gating
-    xdg.configFile."drift/config.toml".text = lib.mkAfter featuresConfig;
-
-    # Deploy QML files into ~/.config/quickshell/drift/
-    xdg.configFile = lib.mkIf cfg.shell.enable {
-      "quickshell/drift/qmldir".source = "${qmlDir}/qmldir";
-      "quickshell/drift/DriftState.qml".source = "${qmlDir}/DriftState.qml";
-      "quickshell/drift/DriftStatus.qml".source = "${qmlDir}/DriftStatus.qml";
-      "quickshell/drift/DriftPanel.qml".source = "${qmlDir}/DriftPanel.qml";
-      "quickshell/drift/DriftToast.qml".source = "${qmlDir}/DriftToast.qml";
-      "quickshell/drift/DriftToastManager.qml".source = "${qmlDir}/DriftToastManager.qml";
-    };
+    xdg.configFile = lib.mkMerge [
+      {
+        # Write [features] section into drift's config.toml for runtime gating
+        "drift/config.toml".text = lib.mkAfter featuresConfig;
+      }
+      (lib.mkIf cfg.shell.enable {
+        # Deploy QML files into ~/.config/quickshell/drift/
+        "quickshell/drift/qmldir".source = "${qmlDir}/qmldir";
+        "quickshell/drift/DriftState.qml".source = "${qmlDir}/DriftState.qml";
+        "quickshell/drift/DriftStatus.qml".source = "${qmlDir}/DriftStatus.qml";
+        "quickshell/drift/DriftPanel.qml".source = "${qmlDir}/DriftPanel.qml";
+        "quickshell/drift/DriftToast.qml".source = "${qmlDir}/DriftToast.qml";
+        "quickshell/drift/DriftToastManager.qml".source = "${qmlDir}/DriftToastManager.qml";
+        "quickshell/drift/DriftCommandBar.qml".source = "${qmlDir}/DriftCommandBar.qml";
+      })
+    ];
 
     # --- Systemd user services ---
 

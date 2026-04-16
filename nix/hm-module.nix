@@ -5,6 +5,13 @@
 let
   cfg = config.programs.drift;
   qmlDir = "${self}/drift-shell";
+
+  featuresConfig = ''
+    [features]
+    dispatch = ${lib.boolToString cfg.features.dispatch}
+    commander = ${lib.boolToString cfg.features.commander}
+    drivers = [${lib.concatMapStringsSep ", " (d: ''"${d}"'') cfg.features.drivers}]
+  '';
 in
 {
   options.programs.drift = {
@@ -14,6 +21,22 @@ in
       type = lib.types.package;
       default = self.packages.${pkgs.system}.default;
       description = "The drift CLI package.";
+    };
+
+    features = {
+      dispatch = lib.mkEnableOption "task dispatch pipeline";
+
+      commander = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Enable voice/LLM commander at runtime.";
+      };
+
+      drivers = lib.mkOption {
+        type = lib.types.listOf (lib.types.enum [ "claude-code" "codex" ]);
+        default = [ "claude-code" ];
+        description = "Agent drivers to register at runtime.";
+      };
     };
 
     shell.enable = lib.mkOption {
@@ -174,6 +197,9 @@ in
 
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
+
+    # Write [features] section into drift's config.toml for runtime gating
+    xdg.configFile."drift/config.toml".text = lib.mkAfter featuresConfig;
 
     # Deploy QML files into ~/.config/quickshell/drift/
     xdg.configFile = lib.mkIf cfg.shell.enable {

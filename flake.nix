@@ -59,5 +59,28 @@
       }))
     // {
       homeManagerModules.default = import ./nix/hm-module.nix { inherit self; };
+      nixosModules.drift = import ./nix/nixos-module.nix { inherit self; };
+
+      # overview-only build: strips dispatch, worktree, handoff, tasks, post-dispatch
+      packages.x86_64-linux.drift-overview =
+        let
+          pkgs = nixpkgs.legacyPackages.x86_64-linux;
+          craneLib = crane.mkLib pkgs;
+          commonArgs = {
+            src = craneLib.cleanCargoSource ./.;
+            strictDeps = true;
+            buildInputs = [ pkgs.openssl pkgs.portaudio pkgs.onnxruntime pkgs.alsa-lib ];
+            nativeBuildInputs = [ pkgs.pkg-config ];
+            ORT_LIB_LOCATION = "${pkgs.onnxruntime}/lib";
+            ORT_PREFER_DYNAMIC_LINK = "1";
+          };
+          cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
+            cargoExtraArgs = "--package drift-cli --no-default-features --features overview";
+          });
+        in
+        craneLib.buildPackage (commonArgs // {
+          inherit cargoArtifacts;
+          cargoExtraArgs = "--package drift-cli --no-default-features --features overview";
+        });
     };
 }

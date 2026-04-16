@@ -108,6 +108,30 @@ impl NiriClient {
         }
     }
 
+    /// Rename a project's workspace. Finds the workspace whose name matches the
+    /// project exactly or starts with "{project} · " (from a prior rename).
+    pub fn rename_workspace(&mut self, project: &str, new_name: &str) -> anyhow::Result<()> {
+        let workspaces = self.workspaces()?;
+        let separator = format!("{project} \u{00b7} ");
+        let current_name = workspaces
+            .iter()
+            .filter_map(|ws| ws.name.as_deref())
+            .find(|name| *name == project || name.starts_with(&separator));
+        let current_name = match current_name {
+            Some(n) => n.to_string(),
+            None => return Ok(()), // workspace not found, silently ignore
+        };
+        let reply = self.socket.send(Request::Action(Action::SetWorkspaceName {
+            name: new_name.to_string(),
+            workspace: Some(WorkspaceReferenceArg::Name(current_name)),
+        }))?;
+        match reply {
+            Ok(Response::Handled) => Ok(()),
+            Ok(other) => bail!("unexpected response: {other:?}"),
+            Err(msg) => bail!("niri error: {msg}"),
+        }
+    }
+
     pub fn focus_workspace_down(&mut self) -> anyhow::Result<()> {
         let reply = self
             .socket

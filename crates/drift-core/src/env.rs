@@ -45,6 +45,15 @@ pub fn build_env(project: &ProjectConfig) -> anyhow::Result<HashMap<String, Stri
         env.insert(key.clone(), value.clone());
     }
 
+    // Set PROJECT.md path if it exists
+    let ps_path = crate::paths::project_state_path(&repo_path);
+    if ps_path.exists() {
+        env.insert(
+            "DRIFT_PROJECT_STATE".into(),
+            ps_path.to_string_lossy().into(),
+        );
+    }
+
     if let Some(ports) = &project.ports {
         if let Some([start, end]) = ports.range {
             env.insert("DRIFT_PORT_RANGE_START".into(), start.to_string());
@@ -59,6 +68,25 @@ pub fn build_env(project: &ProjectConfig) -> anyhow::Result<HashMap<String, Stri
     }
 
     Ok(env)
+}
+
+/// Build additional env vars for dispatched tasks.
+pub fn dispatch_env(task_id: &str, handoff_path: &std::path::Path) -> HashMap<String, String> {
+    let mut env = HashMap::new();
+    env.insert("DRIFT_TASK_ID".into(), task_id.into());
+    env.insert(
+        "DRIFT_HANDOFF_PATH".into(),
+        handoff_path.to_string_lossy().into(),
+    );
+    env
+}
+
+/// Build env vars for worktree-based dispatch.
+pub fn worktree_env(worktree_path: &std::path::Path) -> HashMap<String, String> {
+    let mut env = HashMap::new();
+    env.insert("DRIFT_WORKTREE".into(), "true".into());
+    env.insert("DRIFT_WORKTREE_PATH".into(), worktree_path.to_string_lossy().into());
+    env
 }
 
 pub fn format_env_exports(env: &HashMap<String, String>) -> String {
@@ -92,6 +120,8 @@ mod tests {
             windows: vec![],
             tmux: None,
             scratchpad: None,
+            verification: None,
+            dispatcher: None,
         }
     }
 

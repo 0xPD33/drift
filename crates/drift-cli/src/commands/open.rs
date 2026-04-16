@@ -5,10 +5,15 @@ use std::time::Duration;
 use anyhow::Context;
 use drift_core::{config, env, kdl, niri, paths, registry, workspace};
 
-pub fn run(name: &str) -> anyhow::Result<()> {
+pub fn run(name: &str, attach: Option<&str>) -> anyhow::Result<()> {
     let project = config::load_project_config(name)?;
     let global = config::load_global_config()?;
     let mut niri_client = niri::NiriClient::connect()?;
+
+    // Piggyback mode: attach agent session to an existing workspace
+    if let Some(host_workspace) = attach {
+        return run_attach(name, host_workspace, &project, &global, niri_client);
+    }
 
     // Hot path: workspace already exists, just focus it
     if niri_client.find_workspace_by_name(name)?.is_some() {
@@ -231,33 +236,21 @@ pub fn run(name: &str) -> anyhow::Result<()> {
         eprintln!("Warning: failed to pre-trust repo for Claude Code: {e}");
     }
 
-    // Spawn interactive agents as terminal windows
+    // Spawn interactive agents as panes in a shared tmux session
     if let Some(ref services) = project.services {
-        for svc in &services.processes {
-            if drift_core::agent::is_interactive_agent(svc) {
-                let agent_cmd = drift_core::agent::build_agent_command(svc, name);
-                let args = build_terminal_args(
-                    terminal,
-                    name,
-                    Some(&svc.name),
-                    &export_str,
-                    &repo_str,
-                    Some(&agent_cmd),
-                );
-                niri_client.spawn(args)?;
-                println!(
-                    "  Spawned interactive agent '{}' ({})",
-                    svc.name,
-                    svc.agent.as_deref().unwrap_or("unknown")
-                );
+        let interactive_agents: Vec<_> = services.processes.iter()
+            .filter(|svc| drift_core::agent::is_interactive_agent(svc))
+            .collect();
 
-                if let Some(width_str) = svc.width.as_deref() {
-                    if let Some(change) = niri::parse_width(width_str) {
-                        let title = format!("drift:{name}/{}", svc.name);
-                        width_requests.push((title, change));
-                    }
-                }
-            }
+        if !interactive_agents.is_empty() {
+            spawn_agent_tmux_session(
+                name,
+                terminal,
+                &export_str,
+                &repo_str,
+                &interactive_agents,
+                &mut niri_client,
+            )?;
         }
     }
 
@@ -283,6 +276,70 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     }
 
     println!("Opened project '{name}'");
+    Ok(())
+}
+
+/// Piggyback: open project's agent tmux session on an existing host workspace.
+fn run_attach(
+    name: &str,
+    host_workspace: &str,
+    project: &config::ProjectConfig,
+    global: &config::GlobalConfig,
+    mut niri_client: niri::NiriClient,
+) -> anyhow::Result<()> {
+    // Verify the host workspace exists
+    if niri_client.find_workspace_by_name(host_workspace)?.is_none() {
+        anyhow::bail!("Host workspace '{host_workspace}' is not open");
+    }
+
+    niri_client.focus_workspace(host_workspace)?;
+
+    let env_vars = env::build_env(project)?;
+    let export_str = env::format_env_exports(&env_vars);
+    let repo_path = config::resolve_repo_path(&project.project.repo)?;
+    let repo_str = repo_path.to_string_lossy();
+    let terminal = &global.defaults.terminal;
+
+    // Launch project's repo trust for Claude Code agents
+    if let Err(e) = drift_core::claude_trust::ensure_claude_trust(&repo_path) {
+        eprintln!("Warning: failed to pre-trust repo for Claude Code: {e}");
+    }
+
+    // Spawn agent panes for this project
+    if let Some(ref services) = project.services {
+        let interactive_agents: Vec<_> = services.processes.iter()
+            .filter(|svc| drift_core::agent::is_interactive_agent(svc))
+            .collect();
+
+        if !interactive_agents.is_empty() {
+            spawn_agent_tmux_session(
+                name,
+                terminal,
+                &export_str,
+                &repo_str,
+                &interactive_agents,
+                &mut niri_client,
+            )?;
+        } else {
+            // No interactive agents — open a plain shell in a scratch session
+            let session = drift_core::agent::next_scratch_session_name();
+            let script = format!("{export_str}\ncd {repo_str}\nexec $SHELL");
+            std::process::Command::new("tmux")
+                .args(["new-session", "-d", "-s", &session, "sh", "-c", &script])
+                .status()
+                .context("creating scratch tmux session")?;
+            let attach_cmd = format!("tmux attach -t '{session}'");
+            let args = build_terminal_args(terminal, name, Some("shell"), &export_str, &repo_str, Some(&attach_cmd));
+            niri_client.spawn(args)?;
+            println!("  Spawned scratch tmux session '{session}' on workspace '{host_workspace}'");
+        }
+    }
+
+    if let Err(e) = drift_core::session::add_project(name) {
+        eprintln!("  Warning: could not update session: {e}");
+    }
+
+    println!("Attached project '{name}' to workspace '{host_workspace}'");
     Ok(())
 }
 
@@ -367,6 +424,72 @@ fn spawn_tmux_windows(
     let args = build_terminal_args(terminal, project_name, Some("tmux"), export_str, repo_path, Some(&format!("tmux attach -t '{session}'")));
     niri_client.spawn(args)?;
     println!("  Created tmux session '{session}' with {} window(s)", tmux_windows.len());
+
+    Ok(())
+}
+
+/// Spawn interactive agents as panes in a shared tmux session `drift-<project>`.
+/// If the session already exists, reattach to it (idempotent).
+/// All panes are arranged with `tmux select-layout tiled`.
+fn spawn_agent_tmux_session(
+    project_name: &str,
+    terminal: &str,
+    export_str: &str,
+    repo_path: &str,
+    agents: &[&drift_core::config::ServiceProcess],
+    niri_client: &mut niri::NiriClient,
+) -> anyhow::Result<()> {
+    let session = drift_core::agent::tmux_session_name(project_name);
+
+    if drift_core::agent::tmux_session_exists(&session) {
+        let attach_cmd = format!("tmux attach -t '{session}'");
+        let args = build_terminal_args(terminal, project_name, Some("agents"), export_str, repo_path, Some(&attach_cmd));
+        niri_client.spawn(args)?;
+        println!("  Attached to existing agent tmux session '{session}'");
+        return Ok(());
+    }
+
+    // Create session with first agent's pane
+    let first = agents[0];
+    let first_cmd = drift_core::agent::build_agent_command(first, project_name);
+    let first_script = format!("{export_str}\ncd {repo_path}\nexec {first_cmd}");
+
+    std::process::Command::new("tmux")
+        .args([
+            "new-session",
+            "-d",
+            "-s", &session,
+            "-n", &first.name,
+            "sh", "-c", &first_script,
+        ])
+        .status()
+        .context("creating agent tmux session")?;
+
+    // Add remaining agents as new panes (split-window)
+    for agent in &agents[1..] {
+        let agent_cmd = drift_core::agent::build_agent_command(agent, project_name);
+        let agent_script = format!("{export_str}\ncd {repo_path}\nexec {agent_cmd}");
+        std::process::Command::new("tmux")
+            .args([
+                "split-window",
+                "-t", &session,
+                "sh", "-c", &agent_script,
+            ])
+            .status()
+            .context("adding agent pane to tmux session")?;
+    }
+
+    // Tile all panes evenly
+    std::process::Command::new("tmux")
+        .args(["select-layout", "-t", &session, "tiled"])
+        .status()
+        .context("applying tiled layout to agent session")?;
+
+    // Spawn one niri terminal window that attaches to the session
+    let attach_cmd = format!("tmux attach -t '{session}'");
+    let args = build_terminal_args(terminal, project_name, Some("agents"), export_str, repo_path, Some(&attach_cmd));
+    niri_client.spawn(args)?;
+    println!("  Spawned agent tmux session '{session}' with {} pane(s)", agents.len());
 
     Ok(())
 }

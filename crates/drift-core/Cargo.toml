@@ -6,6 +6,20 @@ description = "Core library for drift workspace manager"
 license = "MIT"
 repository = "https://github.com/0xPD33/drift"
 
+[features]
+default = ["overview", "dispatch"]
+overview = []
+dispatch = ["tasks", "worktree", "handoff", "post-dispatch", "review"]
+tasks = []
+worktree = []
+handoff = []
+post-dispatch = []
+review = []
+commander = []
+drivers = []
+drivers-claude = ["drivers"]
+drivers-codex = ["drivers"]
+
 [dependencies]
 serde = { workspace = true }
 toml = { workspace = true }
@@ -16,6 +30,8 @@ dirs = "6.0"
 nix = { version = "0.29", features = ["signal", "process"] }
 libc = "0.2"
 time = { version = "0.3", features = ["formatting"] }
+rand = "0.8"
+serde_yaml = "0.9"
 
 [dev-dependencies]
 tempfile = "3"

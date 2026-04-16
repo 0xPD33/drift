@@ -12,7 +12,7 @@ pub fn run(name: &str) -> anyhow::Result<()> {
         }
     }
 
-    super::open::run(name)
+    super::open::run(name, None)
 }
 
 fn detect_current_project() -> Option<String> {

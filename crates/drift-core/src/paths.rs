@@ -25,6 +25,14 @@ pub fn logs_dir(project: &str) -> PathBuf {
     state_dir(project).join("logs")
 }
 
+pub fn handoff_dir(project: &str) -> PathBuf {
+    state_dir(project).join("handoffs")
+}
+
+pub fn handoff_path(project: &str, task_id: &str) -> PathBuf {
+    handoff_dir(project).join(format!("{}.md", task_id))
+}
+
 pub fn niri_rules_path() -> PathBuf {
     config_dir().join("niri-rules.kdl")
 }
@@ -55,6 +63,10 @@ pub fn services_state_path(project: &str) -> PathBuf {
 
 pub fn workspace_state_path(project: &str) -> PathBuf {
     state_dir(project).join("workspace.json")
+}
+
+pub fn task_queue_path(project: &str) -> PathBuf {
+    state_dir(project).join("tasks.json")
 }
 
 pub fn state_base_dir() -> PathBuf {
@@ -95,6 +107,10 @@ pub fn commander_muted_path() -> PathBuf {
 
 pub fn commander_state_path() -> PathBuf {
     state_base_dir().join("commander.json")
+}
+
+pub fn project_state_path(repo_path: &std::path::Path) -> PathBuf {
+    repo_path.join("PROJECT.md")
 }
 
 pub fn session_path() -> PathBuf {

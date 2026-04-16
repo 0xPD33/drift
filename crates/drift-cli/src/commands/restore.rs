@@ -18,7 +18,7 @@ fn restore_single(name: &str) -> anyhow::Result<()> {
         println!("Restoring '{name}' (no saved snapshot)");
     }
 
-    super::open::run(name)
+    super::open::run(name, None)
 }
 
 fn restore_session() -> anyhow::Result<()> {

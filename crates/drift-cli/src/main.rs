@@ -14,11 +14,14 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Adopt { workspace_name, project_name } => {
+            commands::adopt::run(&workspace_name, project_name.as_deref())
+        }
         Commands::Init { name, repo, folder, template } => {
             commands::init::run(&name, repo.as_deref(), folder.as_deref(), template.as_deref())
         }
         Commands::List { archived } => commands::list::run(archived),
-        Commands::Open { name } => commands::open::run(&name),
+        Commands::Open { name, attach } => commands::open::run(&name, attach.as_deref()),
         Commands::Close { name } => commands::close::run(name.as_deref()),
         Commands::Archive { name } => commands::archive::archive(&name),
         Commands::Unarchive { name } => commands::archive::unarchive(&name),
@@ -53,8 +56,16 @@ fn main() -> anyhow::Result<()> {
             commands::CommanderCommand::Setup => commands::commander::setup(),
             commands::CommanderCommand::Train { word } => commands::commander::train(word.as_deref()),
         },
+        #[cfg(feature = "dispatch")]
+        Commands::Task { command } => commands::task::run(command),
+        #[cfg(feature = "dispatch")]
+        Commands::Review { command } => commands::review::run(command),
+        #[cfg(feature = "dispatch")]
+        Commands::Dispatch(args) => commands::dispatch::run(args),
         Commands::Supervisor { project } => {
             drift_core::supervisor::run_supervisor(&project)
         }
+        #[cfg(feature = "dispatch")]
+        Commands::PostDispatch(args) => commands::post_dispatch::run(args),
     }
 }

@@ -12,7 +12,7 @@ use nix::unistd::Pid;
 use drift_core::config;
 use drift_core::events::{self, Event};
 use drift_core::paths;
-use crate::state::{DaemonState, WorkspaceProject};
+use crate::state::{DaemonState, FocusState, NiriWorkspace, WorkspaceProject};
 
 const STATE_WRITE_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -51,9 +51,36 @@ struct DaemonInner {
     terminal_name: String,
     global_persist_windows: bool,
     subscriber_tx: mpsc::Sender<Event>,
+    #[cfg(feature = "dispatch")]
+    dispatch_tx: mpsc::Sender<Event>,
 }
 
 impl DaemonInner {
+    #[cfg(feature = "dispatch")]
+    fn new(subscriber_tx: mpsc::Sender<Event>, dispatch_tx: mpsc::Sender<Event>, buffer_size: usize, terminal_name: String, global_persist_windows: bool) -> Self {
+        let known_projects: HashSet<String> = drift_core::registry::list_projects()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|p| p.project.name)
+            .collect();
+
+        Self {
+            workspaces: HashMap::new(),
+            windows: HashMap::new(),
+            workspace_to_project: HashMap::new(),
+            known_projects,
+            active_project: None,
+            focused_workspace_id: None,
+            events: HashMap::new(),
+            buffer_size,
+            terminal_name,
+            global_persist_windows,
+            subscriber_tx,
+            dispatch_tx,
+        }
+    }
+
+    #[cfg(not(feature = "dispatch"))]
     fn new(subscriber_tx: mpsc::Sender<Event>, buffer_size: usize, terminal_name: String, global_persist_windows: bool) -> Self {
         let known_projects: HashSet<String> = drift_core::registry::list_projects()
             .unwrap_or_default()
@@ -86,6 +113,7 @@ impl DaemonInner {
                     self.known_projects = projects.into_iter().map(|p| p.project.name).collect();
                 }
                 self.rebuild_workspace_project_map();
+                self.emit_unmanaged_workspaces();
 
                 let new_projects: HashSet<String> = self.workspace_to_project.values().cloned().collect();
 
@@ -259,8 +287,52 @@ impl DaemonInner {
             if let Some(name) = &ws.name {
                 if self.known_projects.contains(name.as_str()) {
                     self.workspace_to_project.insert(ws.id, name.clone());
+                } else {
+                    // Match renamed workspaces: "project · status" -> "project"
+                    for project in &self.known_projects {
+                        if name.starts_with(project.as_str())
+                            && name[project.len()..].starts_with(" \u{00b7} ")
+                        {
+                            self.workspace_to_project.insert(ws.id, project.clone());
+                            break;
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    fn emit_unmanaged_workspaces(&mut self) {
+        let unmanaged: Vec<(u64, String, u32)> = self.workspaces.values()
+            .filter(|ws| {
+                ws.name.is_some()
+                    && !self.workspace_to_project.contains_key(&ws.id)
+            })
+            .map(|ws| {
+                let window_count = self.windows.values()
+                    .filter(|w| w.workspace_id == Some(ws.id))
+                    .count() as u32;
+                (ws.id, ws.name.clone().unwrap(), window_count)
+            })
+            .filter(|(_, _, count)| *count > 0)
+            .collect();
+
+        for (ws_id, name, window_count) in unmanaged {
+            let _ = self.subscriber_tx.send(Event {
+                event_type: "workspace.unmanaged".into(),
+                project: String::new(),
+                source: "daemon".into(),
+                ts: events::iso_now(),
+                level: Some("info".into()),
+                title: Some(format!("Unmanaged workspace: {name}")),
+                body: None,
+                meta: Some(serde_json::json!({
+                    "workspace_id": ws_id,
+                    "workspace_name": name,
+                    "window_count": window_count,
+                })),
+                priority: Some("silent".into()),
+            });
         }
     }
 
@@ -316,6 +388,43 @@ impl DaemonInner {
         });
     }
 
+    #[cfg(feature = "dispatch")]
+    fn update_workspace_name(&self, project: &str) {
+        use drift_core::tasks::{TaskQueue, TaskStatus};
+        use drift_core::workspace_names::{format_workspace_name, WorkspaceDisplayState};
+
+        if !self.workspace_to_project.values().any(|p| p == project) {
+            return;
+        }
+
+        let state = match TaskQueue::load(project) {
+            Ok(queue) => {
+                let mut ds = WorkspaceDisplayState::default();
+                for task in &queue.tasks {
+                    match task.status {
+                        TaskStatus::Running => {
+                            ds.agent_running = task.assigned_agent.clone();
+                            ds.task_summary =
+                                Some(task.description.chars().take(30).collect::<String>());
+                        }
+                        TaskStatus::Queued => ds.queued_count += 1,
+                        TaskStatus::NeedsReview => ds.needs_review = true,
+                        TaskStatus::Failed => ds.error = true,
+                        _ => {}
+                    }
+                }
+                ds
+            }
+            Err(_) => WorkspaceDisplayState::default(),
+        };
+
+        let name = format_workspace_name(project, &state);
+
+        if let Ok(mut client) = drift_core::niri::NiriClient::connect() {
+            let _ = client.rename_workspace(project, &name);
+        }
+    }
+
     fn classify_priority(&self, event: &Event) -> &'static str {
         let is_active = self.active_project.as_deref() == Some(event.project.as_str());
         let level = event.level.as_deref().unwrap_or("info");
@@ -342,9 +451,22 @@ impl DaemonInner {
         }
 
         let _ = self.subscriber_tx.send(event.clone());
+        #[cfg(feature = "dispatch")]
+        let _ = self.dispatch_tx.send(event.clone());
 
         if matches!(priority, "critical" | "high" | "medium") {
             self.send_desktop_notification(&event);
+        }
+
+        #[cfg(feature = "dispatch")]
+        match event.event_type.as_str() {
+            "task.running" | "task.completed" | "task.failed" | "task.needs_review"
+            | "task.queued" | "agent.completed" | "agent.error" | "service.crashed" => {
+                if !event.project.is_empty() {
+                    self.update_workspace_name(&event.project);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -398,9 +520,29 @@ impl DaemonInner {
                     })
                 })
                 .collect(),
+            all_workspaces: self.workspaces.values()
+                .map(|ws| {
+                    let window_count = self.windows.values()
+                        .filter(|w| w.workspace_id == Some(ws.id))
+                        .count() as u32;
+                    NiriWorkspace {
+                        workspace_id: ws.id,
+                        name: ws.name.clone(),
+                        is_active: ws.is_active,
+                        is_focused: ws.is_focused,
+                        window_count,
+                        project: self.workspace_to_project.get(&ws.id).cloned(),
+                    }
+                })
+                .collect(),
             recent_events: self.events.iter()
                 .map(|(k, v)| (k.clone(), v.iter().cloned().collect()))
                 .collect(),
+            focus: FocusState {
+                mode: if self.active_project.is_some() { "workspace".into() } else { "overview".into() },
+                active_project: self.active_project.clone(),
+                niri_workspace_id: self.focused_workspace_id,
+            },
         };
 
         let path = paths::daemon_state_path();
@@ -479,6 +621,8 @@ pub fn run_daemon() -> anyhow::Result<()> {
     let commander_enabled = global_config.commander.enabled;
     let events_config = global_config.events;
     let terminal_name = global_config.defaults.terminal;
+    #[cfg(feature = "dispatch")]
+    let dispatch_enabled = global_config.features.dispatch;
 
     let pid_path = paths::daemon_pid_path();
     if let Some(parent) = pid_path.parent() {
@@ -488,8 +632,13 @@ pub fn run_daemon() -> anyhow::Result<()> {
 
     let (msg_tx, msg_rx) = mpsc::channel::<DaemonMsg>();
     let (sub_tx, sub_rx) = mpsc::channel::<Event>();
+    #[cfg(feature = "dispatch")]
+    let (dispatch_tx, dispatch_rx) = mpsc::channel::<Event>();
 
     let global_persist_windows = global_config.defaults.persist_windows;
+    #[cfg(feature = "dispatch")]
+    let mut inner = DaemonInner::new(sub_tx, dispatch_tx, events_config.buffer_size, terminal_name, global_persist_windows);
+    #[cfg(not(feature = "dispatch"))]
     let mut inner = DaemonInner::new(sub_tx, events_config.buffer_size, terminal_name, global_persist_windows);
 
     let tx_events = msg_tx.clone();
@@ -506,6 +655,16 @@ pub fn run_daemon() -> anyhow::Result<()> {
     let subscriber_thread = thread::Builder::new()
         .name("subscriber-manager".into())
         .spawn(move || crate::subscriber::run_subscriber_manager(sub_rx, &SHUTDOWN, replay_count))?;
+
+    #[cfg(feature = "dispatch")]
+    let dispatch_thread = if dispatch_enabled {
+        Some(thread::Builder::new()
+            .name("dispatch-watcher".into())
+            .spawn(move || run_dispatch_watcher(dispatch_rx, &SHUTDOWN))?)
+    } else {
+        drop(dispatch_rx);
+        None
+    };
 
     if commander_enabled {
         spawn_commander();
@@ -547,8 +706,105 @@ pub fn run_daemon() -> anyhow::Result<()> {
     let _ = event_thread.join();
     let _ = emit_thread.join();
     let _ = subscriber_thread.join();
+    #[cfg(feature = "dispatch")]
+    if let Some(t) = dispatch_thread {
+        let _ = t.join();
+    }
 
     Ok(())
+}
+
+#[cfg(feature = "dispatch")]
+fn run_dispatch_watcher(rx: mpsc::Receiver<Event>, shutdown: &AtomicBool) {
+    let min_interval = Duration::from_secs(10);
+    let max_tracked_projects = 100;
+    let mut last_dispatch: HashMap<String, Instant> = HashMap::new();
+
+    while !shutdown.load(Ordering::Relaxed) {
+        let event = match rx.recv_timeout(Duration::from_millis(500)) {
+            Ok(e) => e,
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        };
+
+        match event.event_type.as_str() {
+            "task.completed" | "task.queued" => {}
+            _ => continue,
+        }
+
+        let project = &event.project;
+        if project.is_empty() {
+            continue;
+        }
+
+        if let Some(last) = last_dispatch.get(project) {
+            if last.elapsed() < min_interval {
+                continue;
+            }
+        }
+
+        if try_auto_dispatch(project) {
+            last_dispatch.insert(project.clone(), Instant::now());
+
+            // Prune stale entries to prevent unbounded growth
+            if last_dispatch.len() > max_tracked_projects {
+                last_dispatch.retain(|_, t| t.elapsed() < Duration::from_secs(3600));
+            }
+        }
+    }
+}
+
+#[cfg(feature = "dispatch")]
+fn try_auto_dispatch(project: &str) -> bool {
+    use drift_core::tasks::{TaskQueue, TaskStatus};
+
+    let project_config = match config::load_project_config(project) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    let dispatcher = match project_config.dispatcher {
+        Some(ref d) if d.auto_dispatch => d,
+        _ => return false,
+    };
+
+    let queue = match TaskQueue::load(project) {
+        Ok(q) => q,
+        Err(_) => return false,
+    };
+
+    if dispatcher.review_gate_blocks && !queue.pending_reviews().is_empty() {
+        eprintln!("auto-dispatch: {project} has pending reviews, skipping");
+        return false;
+    }
+
+    let running = queue
+        .tasks
+        .iter()
+        .filter(|t| t.status == TaskStatus::Running)
+        .count();
+    if running >= dispatcher.max_concurrent_agents as usize {
+        return false;
+    }
+
+    if queue.next().is_none() {
+        return false;
+    }
+
+    eprintln!("auto-dispatch: dispatching next task for '{project}'");
+    match std::process::Command::new("drift")
+        .args(["dispatch", project])
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdin(Stdio::null())
+        .spawn()
+    {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("auto-dispatch: failed to spawn drift dispatch: {e}");
+            false
+        }
+    }
 }
 
 #[cfg(test)]
@@ -556,7 +812,9 @@ mod tests {
     use super::*;
 
     fn test_inner() -> DaemonInner {
-        let (tx, _rx) = mpsc::channel();
+        let (sub_tx, _sub_rx) = mpsc::channel();
+        #[cfg(feature = "dispatch")]
+        let (dispatch_tx, _dispatch_rx) = mpsc::channel();
         DaemonInner {
             workspaces: HashMap::new(),
             windows: HashMap::new(),
@@ -568,7 +826,9 @@ mod tests {
             buffer_size: 200,
             terminal_name: "ghostty".into(),
             global_persist_windows: false,
-            subscriber_tx: tx,
+            subscriber_tx: sub_tx,
+            #[cfg(feature = "dispatch")]
+            dispatch_tx,
         }
     }
 

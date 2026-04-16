@@ -3,7 +3,7 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use drift_core::events::Event;
-use drift_core::{config, niri, paths};
+use drift_core::{config, niri, paths, project_state};
 use nix::sys::signal;
 use nix::unistd::Pid;
 
@@ -67,6 +67,9 @@ pub fn run() -> anyhow::Result<()> {
 
     // Ports
     show_ports(&project);
+
+    // Project state
+    show_project_state(&repo_path);
 
     Ok(())
 }
@@ -264,6 +267,40 @@ fn show_ports(project: &config::ProjectConfig) {
     }
 
     println!("{line}");
+}
+
+fn show_project_state(repo_path: &std::path::Path) {
+    let Some(state) = project_state::read_project_state(repo_path) else {
+        return;
+    };
+
+    println!();
+    println!("  Project State:");
+    let priority = state.priority.unwrap_or(3);
+    println!("    Status: {}  Priority: {priority}", state.status);
+
+    if let Some(ref blocked) = state.blocked_by {
+        if !blocked.is_empty() {
+            println!("    Blocked by: {blocked}");
+        }
+    }
+
+    if !state.components.is_empty() {
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for comp in &state.components {
+            *counts.entry(comp.status.as_str()).or_default() += 1;
+        }
+        let summary: Vec<String> = counts
+            .iter()
+            .map(|(status, count)| format!("{count} {status}"))
+            .collect();
+        println!("    Components: {} ({})", state.components.len(), summary.join(", "));
+    }
+
+    if let Some(ref action) = state.last_agent_action {
+        let agent = state.last_agent.as_deref().unwrap_or("unknown");
+        println!("    Last: {agent} — {action}");
+    }
 }
 
 fn show_daemon_status() {

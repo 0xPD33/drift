@@ -220,6 +220,8 @@ mod tests {
             windows: vec![],
             tmux: None,
             scratchpad: None,
+            verification: None,
+            dispatcher: None,
         }
     }
 

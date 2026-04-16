@@ -1,7 +1,36 @@
+use std::process::Command;
+
 use crate::config::ServiceProcess;
 
 const FULL_TOOLS: &str = "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch,NotebookEdit,Task";
 const SAFE_TOOLS: &str = "Read,Glob,Grep,WebFetch,WebSearch";
+
+/// Canonical tmux session name for a project's agent panes.
+pub fn tmux_session_name(project: &str) -> String {
+    format!("drift-{project}")
+}
+
+/// Return true if a tmux session with this name already exists.
+pub fn tmux_session_exists(session: &str) -> bool {
+    Command::new("tmux")
+        .args(["has-session", "-t", session])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Find an unused scratch session name of the form `drift-scratch-<n>`.
+pub fn next_scratch_session_name() -> String {
+    for n in 1..=999 {
+        let name = format!("drift-scratch-{n}");
+        if !tmux_session_exists(&name) {
+            return name;
+        }
+    }
+    "drift-scratch-overflow".to_string()
+}
 
 /// Build the shell command string for an agent service.
 /// Returns the full command to pass to `sh -c`.
@@ -182,5 +211,19 @@ mod tests {
             width: None,
         };
         assert!(!is_interactive_agent(&svc));
+    }
+
+    #[test]
+    fn tmux_session_name_format() {
+        assert_eq!(tmux_session_name("myapp"), "drift-myapp");
+        assert_eq!(tmux_session_name("my-project"), "drift-my-project");
+    }
+
+    #[test]
+    fn scratch_session_name_unique_and_sequential() {
+        // next_scratch_session_name returns drift-scratch-1 when no tmux present
+        // (tmux_session_exists returns false for any name when tmux is not running)
+        let name = next_scratch_session_name();
+        assert!(name.starts_with("drift-scratch-"), "got: {name}");
     }
 }

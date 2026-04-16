@@ -1,8 +1,11 @@
 pub mod add;
+pub mod adopt;
 pub mod archive;
 pub mod close;
 pub mod commander;
 pub mod daemon;
+#[cfg(feature = "dispatch")]
+pub mod dispatch;
 pub mod delete;
 pub mod env;
 pub mod events;
@@ -12,12 +15,18 @@ pub mod logs;
 pub mod niri_rules;
 pub mod notify;
 pub mod open;
+#[cfg(feature = "dispatch")]
+pub mod post_dispatch;
 pub mod ports;
 pub mod remove;
 pub mod restore;
+#[cfg(feature = "dispatch")]
+pub mod review;
 pub mod save;
 pub mod shell_data;
 pub mod status;
+#[cfg(feature = "dispatch")]
+pub mod task;
 pub mod to;
 
 use clap::Subcommand;
@@ -57,6 +66,9 @@ pub enum Commands {
     Open {
         /// Project name
         name: String,
+        /// Attach to an existing workspace instead of creating a new one (piggyback)
+        #[arg(long)]
+        attach: Option<String>,
     },
     /// Close a project workspace
     Close {
@@ -82,8 +94,16 @@ pub enum Commands {
     },
 
     // ── Project ────────────────────────────────────────────────
-    /// Initialize a new project
+    /// Adopt an unmanaged niri workspace as a drift project
     #[command(next_help_heading = "Project")]
+    Adopt {
+        /// Workspace name to adopt
+        workspace_name: String,
+        /// Project name (default: workspace name)
+        #[arg(long)]
+        project_name: Option<String>,
+    },
+    /// Initialize a new project
     Init {
         /// Project name
         name: String,
@@ -202,6 +222,24 @@ pub enum Commands {
         command: CommanderCommand,
     },
 
+    // ── Tasks ──────────────────────────────────────────────────
+    /// Manage task queue
+    #[cfg(feature = "dispatch")]
+    #[command(next_help_heading = "Tasks")]
+    Task {
+        #[command(subcommand)]
+        command: task::TaskCommand,
+    },
+    /// Review completed agent tasks
+    #[cfg(feature = "dispatch")]
+    Review {
+        #[command(subcommand)]
+        command: review::ReviewCommand,
+    },
+    /// Dispatch the next task to an agent
+    #[cfg(feature = "dispatch")]
+    Dispatch(dispatch::DispatchArgs),
+
     // ── Hidden (internal) ──────────────────────────────────────
     /// Run the drift daemon (for systemd, runs in foreground)
     #[command(hide = true)]
@@ -218,4 +256,8 @@ pub enum Commands {
         /// Project name
         project: String,
     },
+    /// Internal: process completed dispatch (not for direct use)
+    #[cfg(feature = "dispatch")]
+    #[command(name = "_post-dispatch", hide = true)]
+    PostDispatch(post_dispatch::PostDispatchArgs),
 }

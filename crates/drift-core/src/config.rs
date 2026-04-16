@@ -15,6 +15,34 @@ pub struct GlobalConfig {
     pub events: EventsConfig,
     #[serde(default)]
     pub commander: CommanderConfig,
+    #[serde(default)]
+    pub features: FeaturesConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FeaturesConfig {
+    #[cfg(feature = "dispatch")]
+    #[serde(default)]
+    pub dispatch: bool,
+    #[serde(default = "default_true")]
+    pub commander: bool,
+    #[serde(default = "default_drivers")]
+    pub drivers: Vec<String>,
+}
+
+fn default_drivers() -> Vec<String> {
+    vec!["claude-code".into(), "codex".into()]
+}
+
+impl Default for FeaturesConfig {
+    fn default() -> Self {
+        Self {
+            #[cfg(feature = "dispatch")]
+            dispatch: false,
+            commander: true,
+            drivers: default_drivers(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -179,6 +207,22 @@ impl Default for CommanderConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DispatcherConfig {
+    #[serde(default)]
+    pub auto_dispatch: bool,
+    #[serde(default = "default_max_concurrent")]
+    pub max_concurrent_agents: u8,
+    #[serde(default = "default_true")]
+    pub review_gate_blocks: bool,
+    pub preferred_agent: Option<String>,
+    pub preferred_model: Option<String>,
+}
+
+fn default_max_concurrent() -> u8 {
+    1
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ProjectConfig {
     pub project: ProjectMeta,
@@ -200,6 +244,10 @@ pub struct ProjectConfig {
     pub tmux: Option<TmuxConfig>,
     #[serde(default)]
     pub scratchpad: Option<ScratchpadConfig>,
+    #[serde(default)]
+    pub verification: Option<VerificationConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatcher: Option<DispatcherConfig>,
 }
 
 fn default_true() -> bool {
@@ -328,6 +376,13 @@ pub struct TmuxConfig {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ScratchpadConfig {
     pub file: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct VerificationConfig {
+    pub command: String,
+    #[serde(default)]
+    pub timeout_sec: Option<u64>,
 }
 
 pub fn load_global_config() -> anyhow::Result<GlobalConfig> {
@@ -672,6 +727,8 @@ replay_on_subscribe = 10
             windows: vec![WindowConfig { name: Some("editor".into()), command: Some("nvim .".into()), width: None, tmux: None, app_id: None }],
             tmux: None,
             scratchpad: None,
+            verification: None,
+            dispatcher: None,
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -703,6 +760,8 @@ replay_on_subscribe = 10
             windows: vec![],
             tmux: None,
             scratchpad: None,
+            verification: None,
+            dispatcher: None,
         };
         config.env.vars.insert("NODE_ENV".into(), "development".into());
         config.env.vars.insert("PORT".into(), "3000".into());
@@ -735,6 +794,8 @@ replay_on_subscribe = 10
             windows: vec![],
             tmux: None,
             scratchpad: None,
+            verification: None,
+            dispatcher: None,
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -784,6 +845,8 @@ replay_on_subscribe = 10
             windows: vec![],
             tmux: None,
             scratchpad: None,
+            verification: None,
+            dispatcher: None,
         };
 
         // Remove the service
@@ -828,6 +891,8 @@ replay_on_subscribe = 10
             windows: vec![],
             tmux: None,
             scratchpad: None,
+            verification: None,
+            dispatcher: None,
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();

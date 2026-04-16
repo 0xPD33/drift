@@ -2,12 +2,43 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use drift_core::events::Event;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FocusState {
+    pub mode: String,
+    pub active_project: Option<String>,
+    pub niri_workspace_id: Option<u64>,
+}
+
+impl Default for FocusState {
+    fn default() -> Self {
+        Self {
+            mode: "overview".into(),
+            active_project: None,
+            niri_workspace_id: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NiriWorkspace {
+    pub workspace_id: u64,
+    pub name: Option<String>,
+    pub is_active: bool,
+    pub is_focused: bool,
+    pub window_count: u32,
+    pub project: Option<String>,
+}
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct DaemonState {
     pub pid: u32,
     pub active_project: Option<String>,
     pub workspace_projects: Vec<WorkspaceProject>,
+    #[serde(default)]
+    pub all_workspaces: Vec<NiriWorkspace>,
     pub recent_events: HashMap<String, Vec<Event>>,
+    #[serde(default)]
+    pub focus: FocusState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +61,7 @@ mod tests {
         assert_eq!(state.pid, 0);
         assert!(state.active_project.is_none());
         assert!(state.workspace_projects.is_empty());
+        assert!(state.all_workspaces.is_empty());
         assert!(state.recent_events.is_empty());
     }
 
@@ -72,7 +104,34 @@ mod tests {
                     window_count: 1,
                 },
             ],
+            all_workspaces: vec![
+                NiriWorkspace {
+                    workspace_id: 1,
+                    name: Some("myapp".into()),
+                    is_active: true,
+                    is_focused: true,
+                    window_count: 3,
+                    project: Some("myapp".into()),
+                },
+                NiriWorkspace {
+                    workspace_id: 2,
+                    name: Some("other".into()),
+                    is_active: false,
+                    is_focused: false,
+                    window_count: 1,
+                    project: Some("other".into()),
+                },
+                NiriWorkspace {
+                    workspace_id: 3,
+                    name: Some("browser".into()),
+                    is_active: false,
+                    is_focused: false,
+                    window_count: 2,
+                    project: None,
+                },
+            ],
             recent_events: events,
+            ..Default::default()
         };
 
         let json = serde_json::to_string_pretty(&state).unwrap();
@@ -89,6 +148,10 @@ mod tests {
         assert_eq!(parsed.workspace_projects[1].workspace_id, 2);
         assert!(!parsed.workspace_projects[1].is_active);
         assert!(!parsed.workspace_projects[1].is_focused);
+        assert_eq!(parsed.all_workspaces.len(), 3);
+        let browser_ws = parsed.all_workspaces.iter().find(|ws| ws.name.as_deref() == Some("browser")).unwrap();
+        assert!(browser_ws.project.is_none());
+        assert_eq!(browser_ws.window_count, 2);
         let evts = parsed.recent_events.get("myapp").unwrap();
         assert_eq!(evts.len(), 1);
         assert_eq!(evts[0].title.as_deref(), Some("Build succeeded"));
@@ -101,6 +164,7 @@ mod tests {
             active_project: None,
             workspace_projects: vec![],
             recent_events: HashMap::new(),
+            ..Default::default()
         };
         let json = serde_json::to_string(&state).unwrap();
         let parsed: DaemonState = serde_json::from_str(&json).unwrap();
@@ -126,6 +190,49 @@ mod tests {
         assert!(parsed.is_active);
         assert!(!parsed.is_focused);
         assert_eq!(parsed.window_count, 5);
+    }
+
+    #[test]
+    fn all_workspaces_includes_non_project() {
+        let state = DaemonState {
+            pid: 1,
+            all_workspaces: vec![
+                NiriWorkspace {
+                    workspace_id: 10,
+                    name: Some("myproject".into()),
+                    is_active: true,
+                    is_focused: true,
+                    window_count: 2,
+                    project: Some("myproject".into()),
+                },
+                NiriWorkspace {
+                    workspace_id: 11,
+                    name: Some("random-ws".into()),
+                    is_active: false,
+                    is_focused: false,
+                    window_count: 5,
+                    project: None,
+                },
+                NiriWorkspace {
+                    workspace_id: 12,
+                    name: None,
+                    is_active: false,
+                    is_focused: false,
+                    window_count: 0,
+                    project: None,
+                },
+            ],
+            ..Default::default()
+        };
+
+        let json = serde_json::to_string_pretty(&state).unwrap();
+        let parsed: DaemonState = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.all_workspaces.len(), 3);
+        assert!(parsed.all_workspaces[0].project.is_some());
+        assert!(parsed.all_workspaces[1].project.is_none());
+        assert_eq!(parsed.all_workspaces[1].window_count, 5);
+        assert!(parsed.all_workspaces[2].name.is_none());
     }
 
     #[test]
@@ -174,6 +281,7 @@ mod tests {
             active_project: Some("proj-a".into()),
             workspace_projects: vec![],
             recent_events: events,
+            ..Default::default()
         };
 
         let json = serde_json::to_string_pretty(&state).unwrap();

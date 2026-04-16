@@ -139,6 +139,8 @@ mod tests {
             env: EnvConfig::default(),
             git: None,
             ports: None,
+            verification: None,
+            dispatcher: None,
             services: Some(ServicesConfig {
                 processes: vec![
                     ServiceProcess {

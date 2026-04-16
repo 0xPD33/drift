@@ -148,6 +148,7 @@ mod tests {
             ports: PortDefaults::default(),
             events: crate::config::EventsConfig::default(),
             commander: crate::config::CommanderConfig::default(),
+            features: crate::config::FeaturesConfig::default(),
         }
     }
 
@@ -168,6 +169,8 @@ mod tests {
             windows: vec![],
             tmux: None,
             scratchpad: None,
+            verification: None,
+            dispatcher: None,
         }
     }
 
